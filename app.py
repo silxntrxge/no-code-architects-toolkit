@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from routes.media_to_mp3 import convert_bp
-from routes.transcribe_media import transcribe_bp
+from routes.transcription import transcription_bp  # Change this line
 from routes.combine_videos import combine_bp
 from routes.audio_mixing import audio_mixing_bp
 from routes.gdrive_upload import gdrive_upload_bp
@@ -13,7 +13,7 @@ CORS(app)
 
 # Register blueprints
 app.register_blueprint(convert_bp)
-app.register_blueprint(transcribe_bp)
+app.register_blueprint(transcription_bp)  # Remove the url_prefix
 app.register_blueprint(combine_bp)
 app.register_blueprint(audio_mixing_bp)
 app.register_blueprint(gdrive_upload_bp)
