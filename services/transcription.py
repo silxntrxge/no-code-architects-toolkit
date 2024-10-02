@@ -9,6 +9,10 @@ import requests
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+def format_timestamp(seconds):
+    """Convert seconds to HH:MM:SS format."""
+    return str(timedelta(seconds=int(seconds))).zfill(8)
+
 def process_transcription(audio_path, output_type):
     """Transcribe audio and return the transcript or SRT content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
@@ -21,8 +25,14 @@ def process_transcription(audio_path, output_type):
         logger.info("Transcription completed successfully")
 
         if output_type == 'transcript':
-            output = result['text']
-            logger.info("Transcript generated")
+            output = []
+            for segment in result['segments']:
+                start_time = format_timestamp(segment['start'])
+                end_time = format_timestamp(segment['end'])
+                text = segment['text'].strip()
+                output.append(f"{start_time}-{end_time}\n{text}\n")
+            output = "\n".join(output)
+            logger.info("Transcript with timestamps generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
