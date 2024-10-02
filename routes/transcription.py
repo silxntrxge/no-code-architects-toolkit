@@ -9,20 +9,20 @@ logger = logging.getLogger(__name__)
 @transcription_bp.route('/transcribe', methods=['POST'])
 def transcribe():
     data = request.get_json()
-    if not data or 'audio_data' not in data or 'webhook_url' not in data:
-        return jsonify({"error": "Missing audio_data or webhook_url"}), 400
+    if not data or 'audio_file' not in data or 'webhook' not in data:
+        return jsonify({"error": "Missing audio_file or webhook"}), 400
     
     try:
-        transcription_result = perform_transcription(data['audio_data'])
+        transcription_result = perform_transcription(data['audio_file'])
         
         # Send the result to the webhook URL
         webhook_response = requests.post(
-            data['webhook_url'],
+            data['webhook'],
             json={"transcription": transcription_result}
         )
         
         if webhook_response.status_code == 200:
-            logger.info(f"Successfully sent transcription to webhook: {data['webhook_url']}")
+            logger.info(f"Successfully sent transcription to webhook: {data['webhook']}")
             return jsonify({"message": "Transcription completed and sent to webhook"}), 200
         else:
             logger.error(f"Failed to send transcription to webhook. Status code: {webhook_response.status_code}")
