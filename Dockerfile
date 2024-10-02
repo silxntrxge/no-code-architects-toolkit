@@ -130,16 +130,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir openai-whisper --timeout=300 -i https://pypi.org/simple
-
-RUN python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
-=======
 RUN pip install openai-whisper && \
     pip install jsonschema && \
     pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
-
 
 # Copy the rest of the application code
 COPY . .
