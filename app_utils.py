@@ -1,4 +1,4 @@
-from flask import request, jsonify, current_app
+from flask import request, jsonify
 from functools import wraps
 import jsonschema
 
@@ -17,9 +17,15 @@ def validate_payload(schema):
         return decorated_function
     return decorator
 
-def queue_task_wrapper(bypass_queue=False):
-    def decorator(f):
-        def wrapper(*args, **kwargs):
-            return current_app.queue_task(bypass_queue=bypass_queue)(f)(*args, **kwargs)
-        return wrapper
-    return decorator
+def rate_limited(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Implement rate limiting logic here if needed
+        return f(*args, **kwargs)
+    return decorated_function
+
+def bypass_queue(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
