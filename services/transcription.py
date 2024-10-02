@@ -4,6 +4,7 @@ import srt
 from datetime import timedelta
 import logging
 import requests
+import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def process_transcription(audio_path, output_type):
             timestamps = []
             text_segments = []
             for segment in result['segments']:
+                logger.info(f"Segment start: {segment['start']}, end: {segment['end']}")
                 start_time = format_timestamp(segment['start'])
                 end_time = format_timestamp(segment['end'])
                 timestamps.append(f"{start_time}-{end_time}")
