@@ -127,10 +127,12 @@ RUN mkdir -p ${WHISPER_CACHE_DIR} && chmod 777 ${WHISPER_CACHE_DIR}
 COPY requirements.txt .
 
 # Install Python dependencies, upgrade pip, and pre-download the Whisper model
-RUN pip install openai-whisper && \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --no-cache-dir openai-whisper --timeout=300 -i https://pypi.org/simple
+
+RUN python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
 
 # Copy the rest of the application code
 COPY . .
