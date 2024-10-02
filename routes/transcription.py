@@ -18,7 +18,10 @@ def transcribe():
         # Send the result to the webhook URL
         webhook_response = requests.post(
             data['webhook'],
-            json={"transcription": transcription_result}
+            json={
+                "timestamps": transcription_result['timestamps'],
+                "transcription": transcription_result['text_segments']
+            }
         )
         
         if webhook_response.status_code == 200:

@@ -25,14 +25,18 @@ def process_transcription(audio_path, output_type):
         logger.info("Transcription completed successfully")
 
         if output_type == 'transcript':
-            output = []
+            timestamps = []
+            text_segments = []
             for segment in result['segments']:
                 start_time = format_timestamp(segment['start'])
                 end_time = format_timestamp(segment['end'])
-                text = segment['text'].strip()
-                output.append(f"{start_time}-{end_time}\n{text}\n")
-            output = "\n".join(output)
-            logger.info("Transcript with timestamps generated")
+                timestamps.append(f"{start_time}-{end_time}")
+                text_segments.append(segment['text'].strip())
+            output = {
+                'timestamps': timestamps,
+                'text_segments': text_segments
+            }
+            logger.info("Transcript with separate timestamps and text segments generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
