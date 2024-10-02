@@ -1,5 +1,5 @@
-from flask import Blueprint, request
-from app_utils import *
+from flask import Blueprint
+from app_utils import validate_payload, queue_task_wrapper
 import logging
 from services.ffmpeg_toolkit import process_video_combination
 from services.authentication import authenticate
@@ -30,11 +30,10 @@ logger = logging.getLogger(__name__)
     "additionalProperties": False
 })
 @queue_task_wrapper(bypass_queue=False)
-def combine_videos():
-    data = request.json
-    job_id = data.get('id', 'default_job_id')
+def combine_videos(job_id, data):
     media_urls = [item['video_url'] for item in data['video_urls']]
     webhook_url = data.get('webhook_url')
+    id = data.get('id')
 
     logger.info(f"Job {job_id}: Received combine-videos request for {len(media_urls)} videos")
 
@@ -43,7 +42,7 @@ def combine_videos():
         logger.info(f"Job {job_id}: Video combination process completed successfully")
 
         return gcs_url, "/combine-videos", 200
-        
+            
     except Exception as e:
         logger.error(f"Job {job_id}: Error during video combination process - {str(e)}")
         return str(e), "/combine-videos", 500

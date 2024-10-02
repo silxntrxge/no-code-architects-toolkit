@@ -12,7 +12,6 @@ def validate_payload(schema):
                 jsonschema.validate(instance=request.json, schema=schema)
             except jsonschema.exceptions.ValidationError as validation_error:
                 return jsonify({"message": f"Invalid payload: {validation_error.message}"}), 400
-            
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -29,7 +28,10 @@ def bypass_queue(f):
     def wrapper(*args, **kwargs):
         if hasattr(current_app, 'queue_task'):
             return current_app.queue_task(bypass_queue=True)(f)(*args, **kwargs)
-        return f(*args, **kwargs)
+        # Extract job_id and data from the request and pass them to the function
+        data = request.json
+        job_id = data.get('id', 'default_job_id')
+        return f(job_id, data)
     return wrapper
 
 def queue_task_wrapper(bypass_queue=False):
@@ -38,6 +40,9 @@ def queue_task_wrapper(bypass_queue=False):
         def wrapper(*args, **kwargs):
             if hasattr(current_app, 'queue_task'):
                 return current_app.queue_task(bypass_queue=bypass_queue)(f)(*args, **kwargs)
-            return f(*args, **kwargs)
+            # Extract job_id and data from the request and pass them to the function
+            data = request.json
+            job_id = data.get('id', 'default_job_id')
+            return f(job_id, data)
         return wrapper
     return decorator
