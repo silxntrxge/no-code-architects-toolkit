@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, jsonify
 from app_utils import validate_payload, queue_task_wrapper
 import logging
 from services.ffmpeg_toolkit import process_conversion
@@ -48,8 +48,11 @@ def convert_media_to_mp3(job_id, data):
 
         logger.info(f"Job {job_id}: File uploaded successfully. URL: {uploaded_file_url}")
 
-        return uploaded_file_url, "/media-to-mp3", 200
+        return jsonify({
+            "message": "Conversion completed",
+            "uploaded_file_url": uploaded_file_url
+        }), 200
 
     except Exception as e:
         logger.error(f"Job {job_id}: Error during processing - {str(e)}")
-        return str(e), "/media-to-mp3", 500
+        return jsonify({"error": str(e)}), 500

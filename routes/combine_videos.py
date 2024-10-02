@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, jsonify
 from app_utils import *
 import logging
 from services.ffmpeg_toolkit import process_video_combination
@@ -41,8 +41,11 @@ def combine_videos(job_id, data):
         gcs_url = process_video_combination(media_urls, job_id)
         logger.info(f"Job {job_id}: Video combination process completed successfully")
 
-        return gcs_url, "/combine-videos", 200
-        
+        return jsonify({
+            "message": "Videos combined successfully",
+            "gcs_url": gcs_url
+        }), 200
+
     except Exception as e:
         logger.error(f"Job {job_id}: Error during video combination process - {str(e)}")
-        return str(e), "/combine-videos", 500
+        return jsonify({"error": str(e)}), 500

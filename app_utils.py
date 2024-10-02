@@ -38,11 +38,13 @@ def queue_task_wrapper(bypass_queue=False):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            if hasattr(current_app, 'queue_task'):
-                return current_app.queue_task(bypass_queue=bypass_queue)(f)(*args, **kwargs)
-            # Extract job_id and data from the request and pass them to the function
-            data = request.json
-            job_id = data.get('id', 'default_job_id')
-            return f(job_id, data)
+            try:
+                if hasattr(current_app, 'queue_task'):
+                    return current_app.queue_task(bypass_queue=bypass_queue)(f)(*args, **kwargs)
+                data = request.json
+                job_id = data.get('id', 'default_job_id')
+                return f(job_id, data)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
         return wrapper
     return decorator
