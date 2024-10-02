@@ -128,11 +128,6 @@ COPY requirements.txt .
 
 # Install Python dependencies, upgrade pip, and pre-download the Whisper model
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-RUN pip install openai-whisper && \
-    pip install jsonschema && \
-    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
 
