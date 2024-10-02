@@ -13,14 +13,16 @@ def transcribe():
         return jsonify({"error": "Missing audio_file or webhook"}), 400
     
     try:
-        transcription_result = perform_transcription(data['audio_file'])
+        transcription = perform_transcription(data['audio_file'])
+        timestamps = transcription['timestamps']
+        text_segments = transcription['text_segments']
         
         # Send the result to the webhook URL
         webhook_response = requests.post(
             data['webhook'],
             json={
-                "timestamps": transcription_result['timestamps'],
-                "transcription": transcription_result['text_segments']
+                "timestamps": timestamps,
+                "transcription": text_segments
             }
         )
         

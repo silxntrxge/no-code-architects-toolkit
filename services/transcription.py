@@ -20,7 +20,7 @@ def process_transcription(audio_path, output_type):
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
 
     try:
-        model = whisper.load_model("base")
+        model = whisper.load_model("base", weights_only=True)
         logger.info("Whisper model loaded successfully")
 
         result = model.transcribe(audio_path)
@@ -40,10 +40,9 @@ def process_transcription(audio_path, output_type):
             
             output = {
                 'transcript': "\n".join(transcript),
-                'webhook_output': {
-                    'timestamps': timestamps,
-                    'text_segments': text_segments
-                }
+                'timestamps': timestamps,          # Added
+                'text_segments': text_segments     # Added
+                # 'webhook_output': { ... }        # Removed to prevent KeyError
             }
             logger.info("Transcript with timestamps per sentence generated")
         elif output_type == 'srt':
