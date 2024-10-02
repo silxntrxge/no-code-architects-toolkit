@@ -1,41 +1,33 @@
 from flask import Blueprint, request, jsonify
-from services.transcription import process_transcription
-import base64
+from services.transcription import perform_transcription
 import requests
-import os
+import logging
 
-transcription = Blueprint('transcription', __name__)
+transcription_bp = Blueprint('transcription', __name__)
+logger = logging.getLogger(__name__)
 
-@transcription.route('/transcribe', methods=['POST'])
-def transcribe_audio_route():
+@transcription_bp.route('/transcribe', methods=['POST'])
+def transcribe():
+    data = request.get_json()
+    if not data or 'audio_data' not in data or 'webhook_url' not in data:
+        return jsonify({"error": "Missing audio_data or webhook_url"}), 400
+    
     try:
-        data = request.get_json()
-        audio_file = data.get('audio_file')
-        webhook_url = data.get('webhook')
-
-        if not audio_file or not webhook_url:
-            return jsonify({'error': 'Missing audio_file or webhook URL'}), 400
-
-        # Decode the base64-encoded audio file
-        audio_data = base64.b64decode(audio_file)
+        transcription_result = perform_transcription(data['audio_data'])
         
-        # Save the audio file temporarily
-        temp_audio_path = 'temp_audio.wav'
-        with open(temp_audio_path, 'wb') as f:
-            f.write(audio_data)
-
-        # Process transcription
-        srt_content = process_transcription(temp_audio_path, 'srt')
-
-        # Send SRT to the webhook
-        response = requests.post(webhook_url, json={'srt': srt_content})
-        if response.status_code == 200:
-            return jsonify({'status': 'success'}), 200
+        # Send the result to the webhook URL
+        webhook_response = requests.post(
+            data['webhook_url'],
+            json={"transcription": transcription_result}
+        )
+        
+        if webhook_response.status_code == 200:
+            logger.info(f"Successfully sent transcription to webhook: {data['webhook_url']}")
+            return jsonify({"message": "Transcription completed and sent to webhook"}), 200
         else:
-            return jsonify({'error': 'Failed to send data to webhook'}), 500
+            logger.error(f"Failed to send transcription to webhook. Status code: {webhook_response.status_code}")
+            return jsonify({"error": "Failed to send transcription to webhook"}), 500
+    
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        # Clean up the temporary audio file
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
+        logger.error(f"Transcription error: {str(e)}")
+        return jsonify({"error": str(e)}), 500

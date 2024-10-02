@@ -1,6 +1,6 @@
 Flask
 Werkzeug
-requests
+requests==2.26.0
 ffmpeg-python
 openai-whisper
 gunicorn

@@ -39,3 +39,9 @@ def process_transcription(audio_path, output_type):
     except Exception as e:
         logger.error(f"Transcription failed: {e}")
         raise
+
+def perform_transcription(audio_data):
+    # Implement your transcription logic here
+    # Example placeholder implementation
+    transcription = "Transcribed text goes here."
+    return transcription
