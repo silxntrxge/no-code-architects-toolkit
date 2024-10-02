@@ -4,15 +4,16 @@ import srt
 from datetime import timedelta
 import logging
 import requests
-import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def format_timestamp(seconds):
-    """Convert seconds to HH:MM:SS format."""
-    return str(timedelta(seconds=int(seconds))).zfill(8)
+    """Convert seconds to HH:MM:SS.mmm format."""
+    td = timedelta(seconds=seconds)
+    milliseconds = int(td.microseconds / 1000)
+    return f"{td.seconds // 3600:02d}:{(td.seconds % 3600) // 60:02d}:{td.seconds % 60:02d}.{milliseconds:03d}"
 
 def process_transcription(audio_path, output_type):
     """Transcribe audio and return the transcript or SRT content."""
@@ -26,19 +27,25 @@ def process_transcription(audio_path, output_type):
         logger.info("Transcription completed successfully")
 
         if output_type == 'transcript':
+            transcript = []
             timestamps = []
             text_segments = []
             for segment in result['segments']:
-                logger.info(f"Segment start: {segment['start']}, end: {segment['end']}")
                 start_time = format_timestamp(segment['start'])
                 end_time = format_timestamp(segment['end'])
+                text = segment['text'].strip()
+                transcript.append(f"{start_time} - {end_time}: {text}")
                 timestamps.append(f"{start_time}-{end_time}")
-                text_segments.append(segment['text'].strip())
+                text_segments.append(text)
+            
             output = {
-                'timestamps': timestamps,
-                'text_segments': text_segments
+                'transcript': "\n".join(transcript),
+                'webhook_output': {
+                    'timestamps': timestamps,
+                    'text_segments': text_segments
+                }
             }
-            logger.info("Transcript with separate timestamps and text segments generated")
+            logger.info("Transcript with timestamps per sentence generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
