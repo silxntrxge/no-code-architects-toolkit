@@ -16,15 +16,9 @@ logger = logging.getLogger(__name__)
         "video_url": {"type": "string", "format": "uri"},
         "srt": {"type": "string"},
         "options": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "option": {"type": "string"},
-                    "value": {}  # Allow any type for value
-                },
-                "required": ["option", "value"]
-            }
+            "type": "object",  # Changed from "array" to "object"
+            "properties": {},  # Allow any properties
+            "additionalProperties": True
         },
         "webhook_url": {"type": "string", "format": "uri"},
         "id": {"type": "string"}
@@ -36,7 +30,7 @@ logger = logging.getLogger(__name__)
 def caption_video(job_id, data):
     video_url = data['video_url']
     caption_srt = data['srt']
-    options = data.get('options', [])
+    options = data.get('options', {})
     webhook_url = data.get('webhook_url')
     id = data.get('id')
 
@@ -47,8 +41,33 @@ def caption_video(job_id, data):
         output_filename = process_captioning(video_url, caption_srt, options, job_id)
         logger.info(f"Job {job_id}: Captioning process completed successfully")
 
-        return output_filename, "/caption-video", 200
+        result = {
+            "message": "Captioning completed",
+            "output_filename": output_filename,
+            "job_id": job_id
+        }
+
+        if webhook_url:
+            try:
+                webhook_response = requests.post(webhook_url, json=result)
+                if webhook_response.status_code == 200:
+                    logger.info(f"Job {job_id}: Successfully sent result to webhook: {webhook_url}")
+                    return jsonify({"message": "Captioning completed and sent to webhook"}), 200
+                else:
+                    logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
+                    return jsonify({"error": "Failed to send result to webhook"}), 500
+            except Exception as webhook_error:
+                logger.error(f"Job {job_id}: Error sending result to webhook: {str(webhook_error)}")
+                return jsonify({"error": "Error sending result to webhook"}), 500
+        else:
+            return jsonify(result), 200
         
     except Exception as e:
-        logger.error(f"Job {job_id}: Error during captioning process - {str(e)}", exc_info=True)
-        return str(e), "/caption-video", 500
+        error_message = f"Job {job_id}: Error during captioning process - {str(e)}"
+        logger.error(error_message, exc_info=True)
+        if webhook_url:
+            try:
+                requests.post(webhook_url, json={"error": error_message, "job_id": job_id})
+            except:
+                pass
+        return jsonify({"error": error_message}), 500
