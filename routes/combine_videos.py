@@ -3,6 +3,7 @@ from app_utils import *
 import logging
 from services.ffmpeg_toolkit import process_video_combination
 from services.authentication import authenticate
+import requests  # Add this import
 
 combine_bp = Blueprint('combine', __name__)
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 })
 @queue_task_wrapper(bypass_queue=False)
 def combine_videos(job_id, data):
-    media_urls = data['video_urls']
+    media_urls = [item['video_url'] for item in data['video_urls']]
     webhook_url = data.get('webhook_url')
     id = data.get('id')
 
@@ -41,11 +42,30 @@ def combine_videos(job_id, data):
         gcs_url = process_video_combination(media_urls, job_id)
         logger.info(f"Job {job_id}: Video combination process completed successfully")
 
-        return jsonify({
+        result = {
             "message": "Videos combined successfully",
-            "gcs_url": gcs_url
-        }), 200
+            "gcs_url": gcs_url,
+            "job_id": job_id
+        }
+
+        if webhook_url:
+            try:
+                webhook_response = requests.post(webhook_url, json=result)
+                if webhook_response.status_code == 200:
+                    logger.info(f"Job {job_id}: Successfully sent result to webhook: {webhook_url}")
+                else:
+                    logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
+            except Exception as webhook_error:
+                logger.error(f"Job {job_id}: Error sending result to webhook: {str(webhook_error)}")
+
+        return jsonify(result), 200
 
     except Exception as e:
-        logger.error(f"Job {job_id}: Error during video combination process - {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_message = f"Job {job_id}: Error during video combination process - {str(e)}"
+        logger.error(error_message)
+        if webhook_url:
+            try:
+                requests.post(webhook_url, json={"error": error_message, "job_id": job_id})
+            except:
+                pass
+        return jsonify({"error": error_message}), 500

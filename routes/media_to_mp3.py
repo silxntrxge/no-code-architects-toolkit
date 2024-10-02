@@ -5,6 +5,7 @@ from services.ffmpeg_toolkit import process_conversion
 from services.authentication import authenticate
 from services.gcp_toolkit import upload_to_gcs
 import os
+import requests  # Add this import
 
 convert_bp = Blueprint('convert', __name__)
 logger = logging.getLogger(__name__)
@@ -48,11 +49,30 @@ def convert_media_to_mp3(job_id, data):
 
         logger.info(f"Job {job_id}: File uploaded successfully. URL: {uploaded_file_url}")
 
-        return jsonify({
+        result = {
             "message": "Conversion completed",
-            "uploaded_file_url": uploaded_file_url
-        }), 200
+            "uploaded_file_url": uploaded_file_url,
+            "job_id": job_id
+        }
+
+        if webhook_url:
+            try:
+                webhook_response = requests.post(webhook_url, json=result)
+                if webhook_response.status_code == 200:
+                    logger.info(f"Job {job_id}: Successfully sent result to webhook: {webhook_url}")
+                else:
+                    logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
+            except Exception as webhook_error:
+                logger.error(f"Job {job_id}: Error sending result to webhook: {str(webhook_error)}")
+
+        return jsonify(result), 200
 
     except Exception as e:
-        logger.error(f"Job {job_id}: Error during processing - {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_message = f"Job {job_id}: Error during processing - {str(e)}"
+        logger.error(error_message)
+        if webhook_url:
+            try:
+                requests.post(webhook_url, json={"error": error_message, "job_id": job_id})
+            except:
+                pass
+        return jsonify({"error": error_message}), 500
