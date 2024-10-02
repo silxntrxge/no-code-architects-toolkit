@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from functools import wraps
 import jsonschema
 
@@ -27,5 +27,17 @@ def rate_limited(f):
 def bypass_queue(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
+        if hasattr(current_app, 'queue_task'):
+            return current_app.queue_task(bypass_queue=True)(f)(*args, **kwargs)
         return f(*args, **kwargs)
     return wrapper
+
+def queue_task_wrapper(bypass_queue=False):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if hasattr(current_app, 'queue_task'):
+                return current_app.queue_task(bypass_queue=bypass_queue)(f)(*args, **kwargs)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
