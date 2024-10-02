@@ -134,12 +134,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy the rest of the application code
 COPY . .
 
+# Debugging step to list routes directory
+RUN ls -l /app/routes
+
 # Create a non-root user and switch to it
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Expose the port the app runs on
 EXPOSE 8080
