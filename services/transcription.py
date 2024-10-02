@@ -15,12 +15,20 @@ def format_timestamp(seconds):
     milliseconds = int(td.microseconds / 1000)
     return f"{td.seconds // 3600:02d}:{(td.seconds % 3600) // 60:02d}:{td.seconds % 60:02d}.{milliseconds:03d}"
 
+def calculate_duration(start, end):
+    """Calculate duration between two timestamps in seconds."""
+    start_parts = start.split(':')
+    end_parts = end.split(':')
+    start_seconds = int(start_parts[0]) * 3600 + int(start_parts[1]) * 60 + float(start_parts[2])
+    end_seconds = int(end_parts[0]) * 3600 + int(end_parts[1]) * 60 + float(end_parts[2])
+    return round(end_seconds - start_seconds, 2)
+
 def process_transcription(audio_path, output_type):
     """Transcribe audio and return the transcript or SRT content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
 
     try:
-        model = whisper.load_model("base")  # Removed weights_only argument
+        model = whisper.load_model("base")
         logger.info("Whisper model loaded successfully")
 
         result = model.transcribe(audio_path)
@@ -30,6 +38,7 @@ def process_transcription(audio_path, output_type):
             transcript = []
             timestamps = []
             text_segments = []
+            durations = []
             for segment in result['segments']:
                 start_time = format_timestamp(segment['start'])
                 end_time = format_timestamp(segment['end'])
@@ -37,13 +46,15 @@ def process_transcription(audio_path, output_type):
                 transcript.append(f"{start_time} - {end_time}: {text}")
                 timestamps.append(f"{start_time}-{end_time}")
                 text_segments.append(text)
+                durations.append(str(calculate_duration(start_time, end_time)))
             
             output = {
                 'transcript': "\n".join(transcript),
                 'timestamps': timestamps,
-                'text_segments': text_segments
+                'text_segments': text_segments,
+                'durations': durations
             }
-            logger.info("Transcript with timestamps per sentence generated")
+            logger.info("Transcript with timestamps and durations per sentence generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):

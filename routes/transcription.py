@@ -16,13 +16,15 @@ def transcribe():
         transcription = perform_transcription(data['audio_file'])
         timestamps = transcription['timestamps']
         text_segments = transcription['text_segments']
+        durations = transcription['durations']
         
         # Send the result to the webhook URL
         webhook_response = requests.post(
             data['webhook'],
             json={
                 "timestamps": timestamps,
-                "transcription": text_segments
+                "transcription": text_segments,
+                "durations": durations
             }
         )
         
