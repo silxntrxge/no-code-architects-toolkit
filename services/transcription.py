@@ -4,7 +4,6 @@ import srt
 from datetime import timedelta
 import logging
 import requests
-import warnings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -21,9 +20,7 @@ def process_transcription(audio_path, output_type):
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
 
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=FutureWarning)
-            model = whisper.load_model("base", weights_only=True)
+        model = whisper.load_model("base")  # Removed weights_only argument
         logger.info("Whisper model loaded successfully")
 
         result = model.transcribe(audio_path)
@@ -43,9 +40,8 @@ def process_transcription(audio_path, output_type):
             
             output = {
                 'transcript': "\n".join(transcript),
-                'timestamps': timestamps,          # Added
-                'text_segments': text_segments     # Added
-                # 'webhook_output': { ... }        # Removed to prevent KeyError
+                'timestamps': timestamps,
+                'text_segments': text_segments
             }
             logger.info("Transcript with timestamps per sentence generated")
         elif output_type == 'srt':
