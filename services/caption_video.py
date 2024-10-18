@@ -39,8 +39,8 @@ FONT_PATHS = {
 
 def process_captioning(video_url, caption_srt, options, job_id):
     try:
-        logger.info(f"Job {job_id}: Starting download of file from {file_url}")
-        video_path = download_file(file_url, STORAGE_PATH)
+        logger.info(f"Job {job_id}: Starting download of file from {video_url}")
+        video_path = download_file(video_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
 
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}.srt")
@@ -60,8 +60,7 @@ def process_captioning(video_url, caption_srt, options, job_id):
             with open(srt_path, 'w') as srt_file:
                 srt_file.write(caption_srt)
         
-        # Create a temporary SRT file
-         logger.info(f"Job {job_id}: SRT file created at {srt_path}")
+        logger.info(f"Job {job_id}: SRT file created at {srt_path}")
 
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
 
@@ -148,16 +147,13 @@ def process_captioning(video_url, caption_srt, options, job_id):
         logger.info(f"Job {job_id}: File uploaded to GCS at {output_filename}")
 
         # Clean up local files
-        
-        # Clean up temporary files
         os.remove(video_path)
         os.remove(srt_path)
-        
-os.remove(output_path)
+        os.remove(output_path)
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
     except Exception as e:
-  logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
+        logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
         raise
 
 def convert_array_to_collection(options):
