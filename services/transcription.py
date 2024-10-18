@@ -4,6 +4,8 @@ import srt
 from datetime import timedelta
 import logging
 import requests
+import nltk
+nltk.download('punkt', quiet=True)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -23,6 +25,12 @@ def calculate_duration(start, end):
     end_seconds = int(end_parts[0]) * 3600 + int(end_parts[1]) * 60 + float(end_parts[2])
     return round(end_seconds - start_seconds, 2)
 
+def split_sentence(sentence):
+    """Split a sentence into two parts at the most appropriate point."""
+    words = sentence.split()
+    mid = len(words) // 2
+    return ' '.join(words[:mid]), ' '.join(words[mid:])
+
 def process_transcription(audio_path, output_type):
     """Transcribe audio and return the transcript or SRT content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
@@ -38,7 +46,8 @@ def process_transcription(audio_path, output_type):
             transcript = []
             timestamps = []
             text_segments = []
-            durations = []
+            duration_sentences = []
+            duration_splitsentence = []
             for segment in result['segments']:
                 start_time = format_timestamp(segment['start'])
                 end_time = format_timestamp(segment['end'])
@@ -46,15 +55,25 @@ def process_transcription(audio_path, output_type):
                 transcript.append(f"{start_time} - {end_time}: {text}")
                 timestamps.append(f"{start_time}-{end_time}")
                 text_segments.append(text)
-                durations.append(str(calculate_duration(start_time, end_time)))
+                duration = calculate_duration(start_time, end_time)
+                duration_sentences.append(str(duration))
+                
+                # Split sentence analysis
+                part1, part2 = split_sentence(text)
+                mid_time = segment['start'] + (duration / 2)
+                duration_splitsentence.append([
+                    str(round(mid_time - segment['start'], 2)),
+                    str(round(segment['end'] - mid_time, 2))
+                ])
             
             output = {
                 'transcript': "\n".join(transcript),
                 'timestamps': timestamps,
                 'text_segments': text_segments,
-                'durations': durations
+                'duration_sentences': duration_sentences,
+                'duration_splitsentence': duration_splitsentence
             }
-            logger.info("Transcript with timestamps and durations per sentence generated")
+            logger.info("Transcript with timestamps, sentence durations, and split sentence durations generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):

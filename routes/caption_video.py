@@ -4,6 +4,7 @@ import logging
 from services.caption_video import process_captioning
 from services.authentication import authenticate
 from services.gcp_toolkit import upload_to_gcs
+import requests
 
 caption_bp = Blueprint('caption', __name__)
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ def caption_video(job_id, data):
     webhook_url = data.get('webhook_url')
     id = data.get('id')
 
-    logger.info(f"Job {job_id}: Received captioning request for {video_url}")
-    logger.info(f"Job {job_id}: Options received: {options}")
+    logger.info(f"Job {id}: Received captioning request for {video_url}")
+    logger.info(f"Job {id}: Options received: {options}")
 
     try:
         output_filename = process_captioning(video_url, caption_srt, options, job_id)
@@ -43,8 +44,8 @@ def caption_video(job_id, data):
 
         result = {
             "message": "Captioning completed",
-            "output_filename": output_filename,
-            "job_id": job_id
+             "gcs_url": gcs_url,
+            "job_id": id
         }
 
         if webhook_url:
@@ -55,7 +56,7 @@ def caption_video(job_id, data):
                     return jsonify({"message": "Captioning completed and sent to webhook"}), 200
                 else:
                     logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
-                    return jsonify({"error": "Failed to send result to webhook"}), 500
+                    return jsonify({"error": "Failed to send result to webhook"}), 500          
             except Exception as webhook_error:
                 logger.error(f"Job {job_id}: Error sending result to webhook: {str(webhook_error)}")
                 return jsonify({"error": "Error sending result to webhook"}), 500
