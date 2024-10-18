@@ -131,6 +131,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     python -c "import os; os.environ['WHISPER_CACHE_DIR'] = '${WHISPER_CACHE_DIR}'; import whisper; whisper.load_model('base')"
 
+# Download NLTK data
+RUN python -m nltk.downloader punkt
+
 # Copy the rest of the application code
 COPY . .
 
@@ -158,4 +161,4 @@ gunicorn --bind 0.0.0.0:8080 \
     chmod +x /app/run_gunicorn.sh
 
 # Run the shell script
-CMD ["/app/run_gunicorn.sh"]
+CMD ["gunicorn", "--workers", "2", "--timeout", "120", "--bind", "0.0.0.0:8080", "app:app"]

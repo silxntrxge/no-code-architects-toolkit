@@ -5,7 +5,6 @@ from datetime import timedelta
 import logging
 import requests
 import nltk
-nltk.download('punkt', quiet=True)
 
 # Set up logging
 logger = logging.getLogger(__name__)
