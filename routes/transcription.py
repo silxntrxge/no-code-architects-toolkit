@@ -29,7 +29,13 @@ def transcribe(job_id, data):
     logger.info(f"Job {id}: Received transcription request for {audio_file}")
 
     try:
-        transcription = perform_transcription(audio_file)
+        words_per_subtitle = data.get('option')
+        if words_per_subtitle:
+            words_per_subtitle = int(words_per_subtitle)
+        else:
+            words_per_subtitle = None
+
+        transcription = perform_transcription(audio_file, words_per_subtitle)
         result = {
             "message": "Transcription completed",
             "timestamps": transcription['timestamps'],

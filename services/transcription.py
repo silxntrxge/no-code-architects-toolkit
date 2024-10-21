@@ -52,7 +52,57 @@ def split_sentence(sentence, start_time, end_time):
 
     return part1, part2, duration1, duration2
 
-def process_transcription(audio_path, output_type):
+def create_word_level_srt(segments, words_per_subtitle):
+    """Create SRT content with a specified number of words per subtitle."""
+    srt_entries = []
+    word_count = 0
+    current_words = []
+    start_time = None
+    
+    for segment in segments:
+        words = segment['text'].split()
+        segment_start = segment['start']
+        segment_end = segment['end']
+        word_duration = (segment_end - segment_start) / len(words)
+        
+        for word in words:
+            if start_time is None:
+                start_time = segment_start
+            
+            current_words.append(word)
+            word_count += 1
+            
+            if word_count == words_per_subtitle:
+                end_time = start_time + (word_duration * words_per_subtitle)
+                srt_entries.append({
+                    'start': start_time,
+                    'end': end_time,
+                    'text': ' '.join(current_words)
+                })
+                start_time = None
+                current_words = []
+                word_count = 0
+            
+            segment_start += word_duration
+    
+    # Add any remaining words
+    if current_words:
+        srt_entries.append({
+            'start': start_time,
+            'end': segment_end,
+            'text': ' '.join(current_words)
+        })
+    
+    # Format SRT content
+    srt_content = []
+    for i, entry in enumerate(srt_entries, start=1):
+        start = format_timestamp(entry['start']).replace('.', ',')
+        end = format_timestamp(entry['end']).replace('.', ',')
+        srt_content.append(f"{i}\n{start} --> {end}\n{entry['text']}")
+    
+    return "\n\n".join(srt_content)
+
+def process_transcription(audio_path, output_type, words_per_subtitle=None):
     """Transcribe audio and return the transcript or SRT content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
 
@@ -99,13 +149,18 @@ def process_transcription(audio_path, output_type):
                     start_time = end_time
                     i += 1  # Increment counter for next SRT entry
             
+            if words_per_subtitle:
+                srt_format = create_word_level_srt(result['segments'], words_per_subtitle)
+            else:
+                srt_format = "\n\n".join(srt_format)
+
             output = {
                 'transcript': "\n".join(transcript),
                 'timestamps': timestamps,
                 'text_segments': text_segments,
                 'duration_sentences': duration_sentences,
                 'duration_splitsentence': duration_splitsentence,
-                'srt_format': "\n\n".join(srt_format)  # Join SRT entries with double newline
+                'srt_format': srt_format
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, and SRT format generated")
         elif output_type == 'srt':
@@ -126,7 +181,7 @@ def process_transcription(audio_path, output_type):
         logger.error(f"Error during transcription: {str(e)}")
         raise
 
-def perform_transcription(audio_file):
+def perform_transcription(audio_file, words_per_subtitle=None):
     logger.info(f"Starting transcription for file: {audio_file}")
     try:
         # Download the file if it's a URL
@@ -143,7 +198,7 @@ def perform_transcription(audio_file):
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
 
         # Perform transcription
-        transcription = process_transcription(audio_file, 'transcript')
+        transcription = process_transcription(audio_file, 'transcript', words_per_subtitle)
         
         # Clean up temporary file if it was created
         if audio_file == 'temp_audio_file':
@@ -156,7 +211,7 @@ def perform_transcription(audio_file):
             'text_segments': transcription['text_segments'],
             'duration_sentences': transcription['duration_sentences'],
             'duration_splitsentence': transcription['duration_splitsentence'],
-            'srt_format': transcription['srt_format']  # Add this line
+            'srt_format': transcription['srt_format']
         }
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
