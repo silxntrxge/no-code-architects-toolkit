@@ -37,10 +37,11 @@ FONT_PATHS = {
     'Korean Bold': '/usr/share/fonts/truetype/custom/Korean-Bold.ttf'
 }
 
-def process_captioning(video_url, caption_srt, options, job_id):
+def process_captioning(file_url, caption_srt, caption_type, options, job_id):
+    """Process video captioning using FFmpeg."""
     try:
-        logger.info(f"Job {job_id}: Starting download of file from {video_url}")
-        video_path = download_file(video_url, STORAGE_PATH)
+        logger.info(f"Job {job_id}: Starting download of file from {file_url}")
+        video_path = download_file(file_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
 
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}.srt")
