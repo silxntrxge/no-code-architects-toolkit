@@ -69,7 +69,8 @@ def process_transcription(audio_path, output_type):
             text_segments = []
             duration_sentences = []
             duration_splitsentence = []
-            for segment in result['segments']:
+            srt_format = []  # New list for SRT format
+            for i, segment in enumerate(result['segments'], start=1):
                 start_time = segment['start']
                 end_time = segment['end']
                 text = segment['text'].strip()
@@ -88,19 +89,25 @@ def process_transcription(audio_path, output_type):
                     
                     # Split sentence analysis
                     part1, part2, duration1, duration2 = split_sentence(sentence, start_time, end_time)
-                    duration_splitsentence.extend([str(duration1), str(duration2)])  # Changed this line
+                    duration_splitsentence.extend([str(duration1), str(duration2)])
+                    
+                    # Create SRT format entry
+                    srt_entry = f"{i}\n{formatted_start.replace('.', ',')} --> {formatted_end.replace('.', ',')}\n{sentence}"
+                    srt_format.append(srt_entry)
                     
                     # Update start_time for the next sentence
                     start_time = end_time
+                    i += 1  # Increment counter for next SRT entry
             
             output = {
                 'transcript': "\n".join(transcript),
                 'timestamps': timestamps,
                 'text_segments': text_segments,
                 'duration_sentences': duration_sentences,
-                'duration_splitsentence': duration_splitsentence
+                'duration_splitsentence': duration_splitsentence,
+                'srt_format': "\n\n".join(srt_format)  # Join SRT entries with double newline
             }
-            logger.info("Transcript with timestamps, sentence durations, and split sentence durations generated")
+            logger.info("Transcript with timestamps, sentence durations, split sentence durations, and SRT format generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
@@ -148,7 +155,8 @@ def perform_transcription(audio_file):
             'timestamps': transcription['timestamps'],
             'text_segments': transcription['text_segments'],
             'duration_sentences': transcription['duration_sentences'],
-            'duration_splitsentence': transcription['duration_splitsentence']
+            'duration_splitsentence': transcription['duration_splitsentence'],
+            'srt_format': transcription['srt_format']  # Add this line
         }
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")

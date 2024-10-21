@@ -35,7 +35,8 @@ def transcribe(job_id, data):
             "timestamps": transcription['timestamps'],
             "transcription": transcription['text_segments'],
             "durations": transcription['duration_sentences'],
-            "split_sentence_durations": transcription['duration_splitsentence'],  # Added this line
+            "split_sentence_durations": transcription['duration_splitsentence'],
+            "srt_format": transcription['srt_format'],  # Add this line
             "job_id": id
         }
 
