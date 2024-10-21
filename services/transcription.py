@@ -88,7 +88,7 @@ def process_transcription(audio_path, output_type):
                     
                     # Split sentence analysis
                     part1, part2, duration1, duration2 = split_sentence(sentence, start_time, end_time)
-                    duration_splitsentence.append([str(duration1), str(duration2)])
+                    duration_splitsentence.extend([str(duration1), str(duration2)])  # Changed this line
                     
                     # Update start_time for the next sentence
                     start_time = end_time
