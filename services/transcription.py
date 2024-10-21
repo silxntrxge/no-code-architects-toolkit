@@ -5,7 +5,7 @@ from datetime import timedelta
 import logging
 import requests
 import nltk
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Download necessary NLTK data
 nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 
 def format_timestamp(seconds):
     """Convert seconds to HH:MM:SS.mmm format."""
