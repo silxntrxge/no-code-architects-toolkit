@@ -116,7 +116,12 @@ def perform_transcription(audio_file):
             logger.info("Temporary file removed")
 
         logger.info("Transcription completed successfully")
-        return transcription
+        return {
+            'timestamps': transcription['timestamps'],
+            'text_segments': transcription['text_segments'],
+            'duration_sentences': transcription['duration_sentences'],
+            'duration_splitsentence': transcription['duration_splitsentence']
+        }
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise

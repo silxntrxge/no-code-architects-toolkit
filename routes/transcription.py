@@ -34,7 +34,8 @@ def transcribe(job_id, data):
             "message": "Transcription completed",
             "timestamps": transcription['timestamps'],
             "transcription": transcription['text_segments'],
-            "durations": transcription['durations'],
+            "durations": transcription['duration_sentences'],
+            "split_sentence_durations": transcription['duration_splitsentence'],  # Added this line
             "job_id": id
         }
 
