@@ -96,6 +96,17 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         # Update ffmpeg_options with provided options
         ffmpeg_options.update(options)
 
+        # Handle downloadable font
+        font_url = ffmpeg_options['font_name']
+        if font_url and font_url.startswith('http'):
+            try:
+                temp_font_file = download_file(font_url, STORAGE_PATH, suffix='.ttf')
+                if temp_font_file:
+                    ffmpeg_options['font_name'] = temp_font_file
+                    logger.info(f"Job {job_id}: Successfully downloaded font: {temp_font_file}")
+            except Exception as e:
+                logger.error(f"Job {job_id}: Error downloading font: {str(e)}")
+
         # Construct FFmpeg filter options for subtitles with detailed styling
         subtitle_filter = f"subtitles={srt_path}:force_style='"
         style_options = {
@@ -151,6 +162,8 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         os.remove(video_path)
         os.remove(srt_path)
         os.remove(output_path)
+        if font_url and font_url.startswith('http'):
+            os.remove(temp_font_file)
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
     except Exception as e:
