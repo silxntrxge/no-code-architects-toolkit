@@ -5,10 +5,14 @@ from datetime import timedelta
 import logging
 import requests
 import nltk
+from nltk.tokenize import sent_tokenize
 
 # Set up logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Download necessary NLTK data
+nltk.download('punkt', quiet=True)
 
 def format_timestamp(seconds):
     """Convert seconds to HH:MM:SS.mmm format."""
@@ -24,11 +28,28 @@ def calculate_duration(start, end):
     end_seconds = int(end_parts[0]) * 3600 + int(end_parts[1]) * 60 + float(end_parts[2])
     return round(end_seconds - start_seconds, 2)
 
-def split_sentence(sentence):
-    """Split a sentence into two parts at the most appropriate point."""
+def split_sentence(sentence, start_time, end_time):
+    """Split a sentence into two parts and calculate their durations."""
     words = sentence.split()
-    mid = len(words) // 2
-    return ' '.join(words[:mid]), ' '.join(words[mid:])
+    total_duration = end_time - start_time
+    mid_point = len(words) // 2
+
+    # Find the best split point
+    best_split = mid_point
+    for i in range(max(1, mid_point - 3), min(len(words) - 1, mid_point + 4)):
+        if words[i].endswith((',', '.', '!', '?')):
+            best_split = i + 1
+            break
+
+    part1 = ' '.join(words[:best_split])
+    part2 = ' '.join(words[best_split:])
+
+    # Calculate durations based on word count ratio
+    ratio = len(words[:best_split]) / len(words)
+    duration1 = round(total_duration * ratio, 2)
+    duration2 = round(total_duration - duration1, 2)
+
+    return part1, part2, duration1, duration2
 
 def process_transcription(audio_path, output_type):
     """Transcribe audio and return the transcript or SRT content."""
@@ -48,22 +69,28 @@ def process_transcription(audio_path, output_type):
             duration_sentences = []
             duration_splitsentence = []
             for segment in result['segments']:
-                start_time = format_timestamp(segment['start'])
-                end_time = format_timestamp(segment['end'])
+                start_time = segment['start']
+                end_time = segment['end']
                 text = segment['text'].strip()
-                transcript.append(f"{start_time} - {end_time}: {text}")
-                timestamps.append(f"{start_time}-{end_time}")
-                text_segments.append(text)
-                duration = calculate_duration(start_time, end_time)
-                duration_sentences.append(str(duration))
                 
-                # Split sentence analysis
-                part1, part2 = split_sentence(text)
-                mid_time = segment['start'] + (duration / 2)
-                duration_splitsentence.append([
-                    str(round(mid_time - segment['start'], 2)),
-                    str(round(segment['end'] - mid_time, 2))
-                ])
+                # Split the segment into sentences
+                sentences = sent_tokenize(text)
+                
+                for sentence in sentences:
+                    formatted_start = format_timestamp(start_time)
+                    formatted_end = format_timestamp(end_time)
+                    transcript.append(f"{formatted_start} - {formatted_end}: {sentence}")
+                    timestamps.append(f"{formatted_start}-{formatted_end}")
+                    text_segments.append(sentence)
+                    duration = end_time - start_time
+                    duration_sentences.append(str(round(duration, 2)))
+                    
+                    # Split sentence analysis
+                    part1, part2, duration1, duration2 = split_sentence(sentence, start_time, end_time)
+                    duration_splitsentence.append([str(duration1), str(duration2)])
+                    
+                    # Update start_time for the next sentence
+                    start_time = end_time
             
             output = {
                 'transcript': "\n".join(transcript),
