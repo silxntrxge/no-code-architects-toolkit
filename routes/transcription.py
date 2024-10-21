@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
     "properties": {
         "audio_file": {"type": "string", "format": "uri"},
         "webhook": {"type": "string", "format": "uri"},
-        "id": {"type": "string"}
+        "id": {"type": "string"},
+        "option": {"type": ["string", "integer"]}
     },
     "required": ["audio_file"],
     "additionalProperties": False
@@ -25,11 +26,11 @@ def transcribe(job_id, data):
     audio_file = data['audio_file']
     webhook_url = data.get('webhook')
     id = data.get('id', job_id)
+    words_per_subtitle = data.get('option')
 
     logger.info(f"Job {id}: Received transcription request for {audio_file}")
 
     try:
-        words_per_subtitle = data.get('option')
         if words_per_subtitle:
             words_per_subtitle = int(words_per_subtitle)
         else:
@@ -42,7 +43,7 @@ def transcribe(job_id, data):
             "transcription": transcription['text_segments'],
             "durations": transcription['duration_sentences'],
             "split_sentence_durations": transcription['duration_splitsentence'],
-            "srt_format": transcription['srt_format'],  # Add this line
+            "srt_format": transcription['srt_format'],
             "job_id": id
         }
 
