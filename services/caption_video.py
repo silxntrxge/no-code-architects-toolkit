@@ -60,6 +60,22 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         subtitle_extension = '.ass'
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}{subtitle_extension}")
 
+        caption_style = ""
+        if caption_type == 'ass':
+            style_string = generate_style_line(options)
+            caption_style = f"""
+[Script Info]
+Title: Highlight Current Word
+ScriptType: v4.00+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+{style_string}
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+            logger.info(f"Job {job_id}: Generated ASS style string: {style_string}")
+            logger.info(f"Job {job_id}: Full ASS header: {caption_style}")
+
         if caption_srt.startswith("https"):
             # Download the file if caption_srt is a URL
             logger.info(f"Job {job_id}: Downloading caption file from {caption_srt}")
@@ -68,7 +84,7 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             
             if caption_type == 'ass':
                 subtitle_content = caption_style + response.text
-                with open(srt_path, 'w') as srt_file:
+                with open(srt_path, 'w', encoding='utf-8') as srt_file:
                     srt_file.write(subtitle_content)
             else:
                 with open(srt_path, 'wb') as srt_file:
@@ -77,9 +93,10 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             logger.info(f"Job {job_id}: Caption file downloaded to {srt_path}")
         else:
             # Write caption_srt content directly to file
-            with open(srt_path, 'w') as srt_file:
-                srt_file.write(caption_srt)
-        
+            subtitle_content = caption_style + caption_srt if caption_type == 'ass' else caption_srt
+            with open(srt_path, 'w', encoding='utf-8') as srt_file:
+                srt_file.write(subtitle_content)
+
         logger.info(f"Job {job_id}: SRT file created at {srt_path}")
 
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
@@ -126,22 +143,6 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             except Exception as e:
                 logger.error(f"Job {job_id}: Error downloading font: {str(e)}")
 
-        if caption_type == 'ass':
-            style_string = generate_style_line(options)
-            caption_style = f"""
-[Script Info]
-Title: Highlight Current Word
-ScriptType: v4.00+
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-{style_string}
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
-            logger.info(f"Job {job_id}: Generated ASS style string: {style_string}")
-            logger.info(f"Job {job_id}: Full ASS header: {caption_style}")
-
-        # Construct FFmpeg filter options for subtitles with detailed styling
         if caption_type == 'ass':
             subtitle_filter = f"subtitles='{srt_path}'"
         else:
@@ -207,8 +208,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             os.remove(temp_font_file)
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
+    except requests.RequestException as e:
+        logger.error(f"Job {job_id}: Error downloading caption file: {str(e)}")
+        raise
+    except IOError as e:
+        logger.error(f"Job {job_id}: Error writing caption file: {str(e)}")
+        raise
     except Exception as e:
-        logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
+        logger.error(f"Job {job_id}: Unexpected error in process_captioning: {str(e)}")
         raise
 
 def convert_array_to_collection(options):
