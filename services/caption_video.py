@@ -107,6 +107,21 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             except Exception as e:
                 logger.error(f"Job {job_id}: Error downloading font: {str(e)}")
 
+        if caption_type == 'ass':
+            style_string = generate_style_line(options)
+            caption_style = f"""
+[Script Info]
+Title: Highlight Current Word
+ScriptType: v4.00+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+{style_string}
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+            logger.info(f"Job {job_id}: Generated ASS style string: {style_string}")
+            logger.info(f"Job {job_id}: Full ASS header: {caption_style}")
+
         # Construct FFmpeg filter options for subtitles with detailed styling
         subtitle_filter = f"subtitles={srt_path}:force_style='"
         style_options = {
@@ -134,6 +149,14 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             'UpperCase': ffmpeg_options['uppercase']
         }
 
+        if caption_type == 'ass':
+            # Use the subtitles filter without force_style
+            subtitle_filter = f"subtitles='{srt_path}'"
+            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
+            logger.info(f"Job {job_id}: Content of ASS file:")
+            with open(srt_path, 'r') as f:
+                logger.info(f.read())
+
         # Add only populated options to the subtitle filter
         subtitle_filter += ','.join(f"{k}={v}" for k, v in style_options.items() if v is not None)
         subtitle_filter += "'"
@@ -146,12 +169,18 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             ffmpeg.input(video_path).output(
                 output_path,
                 vf=subtitle_filter,
-                acodec='copy',
-            ).run()
+                acodec='copy'
+            ).run(capture_stdout=True, capture_stderr=True)
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
-            logger.error(f"Job {job_id}: FFmpeg error: {e.stderr.decode('utf8')}")
+            error_message = 'Unknown FFmpeg error'
+            if e.stderr:
+                try:
+                    error_message = e.stderr.decode('utf8')
+                except AttributeError:
+                    error_message = str(e.stderr)
+            logger.error(f"Job {job_id}: FFmpeg error: {error_message}")
             raise
 
         # Upload the output video to GCP Storage
