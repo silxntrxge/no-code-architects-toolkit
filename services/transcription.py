@@ -110,48 +110,89 @@ def create_word_level_srt(segments, words_per_subtitle):
     
     return "\n\n".join(srt_content)
 
-def generate_ass_subtitle(result, max_chars=56, words_per_subtitle=None):
-    """Generate ASS subtitle content with proper structure."""
-    
-    ass_content = ""
+def generate_ass_subtitle(result, max_chars):
+    """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
+    logger.info("Generate ASS subtitle content with highlighted current words")
+    # ASS file header
+    ass_content = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 384
+PlayResY: 288
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
 
     def format_time(t):
-        return f"{int(t//3600):01d}:{int((t%3600)//60):02d}:{t%60:06.3f}"
+        hours = int(t // 3600)
+        minutes = int((t % 3600) // 60)
+        seconds = int(t % 60)
+        centiseconds = int(round((t - int(t)) * 100))
+        return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
-    if words_per_subtitle == 1:
-        # Generate word-level ASS subtitles
-        for segment in result['segments']:
-            words = segment['text'].split()
-            segment_start = segment['start']
-            segment_end = segment['end']
-            word_duration = (segment_end - segment_start) / len(words)
-            
-            for i, word in enumerate(words):
-                start_time = format_time(segment_start + i * word_duration)
-                end_time = format_time(segment_start + (i + 1) * word_duration)
-                ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{word}\n"
-    else:
-        # Generate sentence-level ASS subtitles
-        for segment in result['segments']:
-            start_time = format_time(segment['start'])
-            end_time = format_time(segment['end'])
-            text = segment['text'].strip()
-            
-            # Split text into lines if it exceeds max_chars
-            lines = []
-            current_line = ""
-            for word in text.split():
-                if len(current_line) + len(word) + 1 <= max_chars:
-                    current_line += " " + word if current_line else word
-                else:
-                    lines.append(current_line)
-                    current_line = word
-            if current_line:
+    max_chars_per_line = max_chars  # Maximum characters per line
+
+    # Process each segment
+    for segment in result['segments']:
+        words = segment.get('words', [])
+        if not words:
+            continue  # Skip if no word-level timestamps
+
+        # Group words into lines
+        lines = []
+        current_line = []
+        current_line_length = 0
+        for word_info in words:
+            word_length = len(word_info['word']) + 1  # +1 for space
+            if current_line_length + word_length > max_chars_per_line:
                 lines.append(current_line)
-            
-            # Add each line as a separate dialogue event
-            for line in lines:
-                ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{line}\n"
+                current_line = [word_info]
+                current_line_length = word_length
+            else:
+                current_line.append(word_info)
+                current_line_length += word_length
+        if current_line:
+            lines.append(current_line)
+
+        # Generate events for each line
+        for line in lines:
+            line_start_time = line[0]['start']
+            line_end_time = line[-1]['end']
+
+            # Generate events for highlighting each word
+            for i, word_info in enumerate(line):
+                start_time = word_info['start']
+                end_time = word_info['end']
+                current_word = word_info['word']
+
+                # Build the line text with highlighted current word
+                caption_parts = []
+                for w in line:
+                    word_text = w['word']
+                    if w == word_info:
+                        # Highlight current word
+                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+                    else:
+                        # Default color
+                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
+                caption_with_highlight = ' '.join(caption_parts)
+
+                # Format times
+                start = format_time(start_time)
+                # End the dialogue event when the next word starts or at the end of the line
+                if i + 1 < len(line):
+                    end_time = line[i + 1]['start']
+                else:
+                    end_time = line_end_time
+                end = format_time(end_time)
+
+                # Add the dialogue line
+                ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
 
     return ass_content
 
@@ -241,12 +282,25 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 writer = WriteVTT(output_dir=STORAGE_PATH)
                 temp_filename = writer(result, audio_path)
             elif output_type == 'ass':
-                ass_content = generate_ass_subtitle(result, max_chars, words_per_subtitle)
-                temp_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
-                with open(temp_filename, 'w', encoding='utf-8') as f:
+                result = model.transcribe(
+                    audio_path,
+                    word_timestamps=True,
+                    task='transcribe',
+                    verbose=False
+                )
+                logger.info("Transcription completed with word-level timestamps")
+                # Generate ASS subtitle content
+                ass_content = generate_ass_subtitle(result, max_chars)
+                logger.info("Generated ASS subtitle content")
+                
+                # Write the ASS content to a file
+                output_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
+                with open(output_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
+                output = output_filename
+                logger.info(f"Generated {output_type.upper()} output: {output}")
             
-            return {f'{output_type}_file': temp_filename}
+            return {f'{output_type}_file': output}
         else:
             raise ValueError(f"Invalid output type: {output_type}")
 
@@ -295,3 +349,4 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
+
