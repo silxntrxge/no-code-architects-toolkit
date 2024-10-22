@@ -109,42 +109,57 @@ def create_word_level_srt(segments, words_per_subtitle):
     
     return "\n\n".join(srt_content)
 
-def generate_ass_subtitle(segments, words_per_subtitle=None, max_chars=56):
-    """Generate ASS subtitle content, optionally with word-level timing."""
-    ass_content = ""  # Start with an empty string for flexibility
+def generate_ass_subtitle(result, max_chars=56):
+    """Generate ASS subtitle content with proper structure."""
+    ass_content = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 384
+PlayResY: 288
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
 
     def format_time(t):
         return f"{int(t//3600):01d}:{int((t%3600)//60):02d}:{t%60:06.3f}"
 
-    if words_per_subtitle == 1:
-        for segment in segments:
-            words = segment['text'].split()
-            segment_start = segment['start']
-            segment_end = segment['end']
-            word_duration = (segment_end - segment_start) / len(words)
-            
-            for i, word in enumerate(words):
-                start_time = segment_start + i * word_duration
-                end_time = start_time + word_duration
-                ass_content += f"Dialogue: 0,{format_time(start_time)},{format_time(end_time)},Default,,0,0,0,,{word}\n"
-    else:
-        for segment in segments:
-            start_time = format_time(segment['start'])
-            end_time = format_time(segment['end'])
-            text = segment['text'].strip()
-            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+    for segment in result['segments']:
+        start_time = format_time(segment['start'])
+        end_time = format_time(segment['end'])
+        text = segment['text'].strip()
+        
+        # Split text into lines if it exceeds max_chars
+        lines = []
+        current_line = ""
+        for word in text.split():
+            if len(current_line) + len(word) + 1 <= max_chars:
+                current_line += " " + word if current_line else word
+            else:
+                lines.append(current_line)
+                current_line = word
+        if current_line:
+            lines.append(current_line)
+        
+        # Add each line as a separate dialogue event
+        for line in lines:
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{line}\n"
 
     return ass_content
 
-def process_transcription(audio_path, output_type, words_per_subtitle=None):
-    """Transcribe audio and return the transcript or SRT content."""
+def process_transcription(audio_path, output_type, words_per_subtitle=None, max_chars=56, language=None):
+    """Transcribe audio and return the transcript or subtitle content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
 
     try:
         model = whisper.load_model("base")
         logger.info("Whisper model loaded successfully")
 
-        result = model.transcribe(audio_path)
+        result = model.transcribe(audio_path, language=language)
         logger.info("Transcription completed successfully")
 
         if output_type == 'transcript':
@@ -190,11 +205,11 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result['segments'], words_per_subtitle, max_chars=56)
+            ass_content = generate_ass_subtitle(result, max_chars)
             
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
-            with open(temp_ass_filename, 'w') as f:
+            with open(temp_ass_filename, 'w', encoding='utf-8') as f:
                 f.write(ass_content)
             
             # Upload the ASS file to GCS and get the URL
@@ -214,26 +229,19 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output
-        elif output_type == 'srt':
-            srt_subtitles = []
-            for i, segment in enumerate(result['segments'], start=1):
-                start = timedelta(seconds=segment['start'])
-                end = timedelta(seconds=segment['end'])
-                text = segment['text'].strip()
-                srt_subtitles.append(srt.Subtitle(i, start, end, text))
-            output = srt.compose(srt_subtitles)
-            logger.info("SRT content generated")
-        elif output_type in ['vtt', 'ass']:
-            if output_type == 'vtt':
+        elif output_type in ['srt', 'vtt', 'ass']:
+            if output_type == 'srt':
+                writer = WriteSRT(output_dir=STORAGE_PATH)
+                temp_filename = writer(result, audio_path)
+            elif output_type == 'vtt':
                 writer = WriteVTT(output_dir=STORAGE_PATH)
+                temp_filename = writer(result, audio_path)
             elif output_type == 'ass':
-                ass_content = generate_ass_subtitle(result['segments'], words_per_subtitle, max_chars=56)
+                ass_content = generate_ass_subtitle(result, max_chars)
                 temp_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
-                with open(temp_filename, 'w') as f:
+                with open(temp_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
-                return {f'{output_type}_file': temp_filename}
-
-            temp_filename = writer(result, audio_path)
+            
             return {f'{output_type}_file': temp_filename}
         else:
             raise ValueError(f"Invalid output type: {output_type}")
@@ -243,6 +251,10 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+            logger.info(f"Removed temporary file: {audio_path}")
 
 def perform_transcription(audio_file, words_per_subtitle=None, output_type='transcript'):
     logger.info(f"Starting transcription for file: {audio_file}")
