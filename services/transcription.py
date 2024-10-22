@@ -110,45 +110,48 @@ def create_word_level_srt(segments, words_per_subtitle):
     
     return "\n\n".join(srt_content)
 
-def generate_ass_subtitle(result, max_chars=56):
+def generate_ass_subtitle(result, max_chars=56, words_per_subtitle=None):
     """Generate ASS subtitle content with proper structure."""
-    ass_content = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 384
-PlayResY: 288
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+    
+    ass_content = ""
 
     def format_time(t):
         return f"{int(t//3600):01d}:{int((t%3600)//60):02d}:{t%60:06.3f}"
 
-    for segment in result['segments']:
-        start_time = format_time(segment['start'])
-        end_time = format_time(segment['end'])
-        text = segment['text'].strip()
-        
-        # Split text into lines if it exceeds max_chars
-        lines = []
-        current_line = ""
-        for word in text.split():
-            if len(current_line) + len(word) + 1 <= max_chars:
-                current_line += " " + word if current_line else word
-            else:
+    if words_per_subtitle == 1:
+        # Generate word-level ASS subtitles
+        for segment in result['segments']:
+            words = segment['text'].split()
+            segment_start = segment['start']
+            segment_end = segment['end']
+            word_duration = (segment_end - segment_start) / len(words)
+            
+            for i, word in enumerate(words):
+                start_time = format_time(segment_start + i * word_duration)
+                end_time = format_time(segment_start + (i + 1) * word_duration)
+                ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{word}\n"
+    else:
+        # Generate sentence-level ASS subtitles
+        for segment in result['segments']:
+            start_time = format_time(segment['start'])
+            end_time = format_time(segment['end'])
+            text = segment['text'].strip()
+            
+            # Split text into lines if it exceeds max_chars
+            lines = []
+            current_line = ""
+            for word in text.split():
+                if len(current_line) + len(word) + 1 <= max_chars:
+                    current_line += " " + word if current_line else word
+                else:
+                    lines.append(current_line)
+                    current_line = word
+            if current_line:
                 lines.append(current_line)
-                current_line = word
-        if current_line:
-            lines.append(current_line)
-        
-        # Add each line as a separate dialogue event
-        for line in lines:
-            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{line}\n"
+            
+            # Add each line as a separate dialogue event
+            for line in lines:
+                ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{line}\n"
 
     return ass_content
 
@@ -206,7 +209,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result, max_chars)
+            ass_content = generate_ass_subtitle(result, max_chars, words_per_subtitle)
             
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
@@ -238,7 +241,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 writer = WriteVTT(output_dir=STORAGE_PATH)
                 temp_filename = writer(result, audio_path)
             elif output_type == 'ass':
-                ass_content = generate_ass_subtitle(result, max_chars)
+                ass_content = generate_ass_subtitle(result, max_chars, words_per_subtitle)
                 temp_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
                 with open(temp_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
