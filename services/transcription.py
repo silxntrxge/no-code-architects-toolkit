@@ -19,6 +19,9 @@ logging.basicConfig(level=logging.INFO)
 nltk.download('punkt', quiet=True)
 nltk.download('punkt_tab', quiet=True)
 
+# Add this line at the top of the file, after the imports
+STORAGE_PATH = '/tmp'  # or any other appropriate temporary directory
+
 def format_timestamp(seconds):
     """Convert seconds to HH:MM:SS.mmm format."""
     td = timedelta(seconds=seconds)
@@ -150,6 +153,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
             text_segments = []
             duration_sentences = []
             duration_splitsentence = []
+            duration_splitsentence = []
             srt_format = []  # New list for SRT format
             for i, segment in enumerate(result['segments'], start=1):
                 start_time = segment['start']
@@ -209,6 +213,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
                 'ass_file_url': ass_gcs_url  # Add the ASS file URL to the output
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
+            return output
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
@@ -218,8 +223,20 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
                 srt_subtitles.append(srt.Subtitle(i, start, end, text))
             output = srt.compose(srt_subtitles)
             logger.info("SRT content generated")
+        elif output_type in ['vtt', 'ass']:
+            if output_type == 'vtt':
+                writer = WriteVTT(output_dir=STORAGE_PATH)
+            elif output_type == 'ass':
+                ass_content = generate_ass_subtitle(result['segments'], words_per_subtitle, max_chars=56)
+                temp_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
+                with open(temp_filename, 'w') as f:
+                    f.write(ass_content)
+                return {f'{output_type}_file': temp_filename}
+
+            temp_filename = writer(result, audio_path)
+            return {f'{output_type}_file': temp_filename}
         else:
-            raise ValueError("Invalid output type. Must be 'transcript' or 'srt'.")
+            raise ValueError(f"Invalid output type: {output_type}")
 
         logger.info("Transcription process completed successfully")
         return output
@@ -227,7 +244,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
         logger.error(f"Error during transcription: {str(e)}")
         raise
 
-def perform_transcription(audio_file, words_per_subtitle=None):
+def perform_transcription(audio_file, words_per_subtitle=None, output_type='transcript'):
     logger.info(f"Starting transcription for file: {audio_file}")
     try:
         # Download the file if it's a URL
@@ -244,7 +261,7 @@ def perform_transcription(audio_file, words_per_subtitle=None):
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
 
         # Perform transcription
-        transcription = process_transcription(audio_file, 'transcript', words_per_subtitle)
+        transcription = process_transcription(audio_file, output_type, words_per_subtitle)
         
         # Clean up temporary file if it was created
         if audio_file == 'temp_audio_file':
@@ -252,14 +269,7 @@ def perform_transcription(audio_file, words_per_subtitle=None):
             logger.info("Temporary file removed")
 
         logger.info("Transcription completed successfully")
-        return {
-            'timestamps': transcription['timestamps'],
-            'text_segments': transcription['text_segments'],
-            'duration_sentences': transcription['duration_sentences'],
-            'duration_splitsentence': transcription['duration_splitsentence'],
-            'srt_format': transcription['srt_format'],
-            'ass_file_url': transcription['ass_file_url']
-        }
+        return transcription
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
