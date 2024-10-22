@@ -2,8 +2,10 @@ from flask import Blueprint, request, jsonify
 from services.transcription import perform_transcription
 from app_utils import validate_payload, queue_task_wrapper
 from services.authentication import authenticate
+from services.gcp_toolkit import upload_to_gcs
 import requests
 import logging
+import os
 
 transcription_bp = Blueprint('transcription', __name__)
 logger = logging.getLogger(__name__)
@@ -16,7 +18,8 @@ logger = logging.getLogger(__name__)
         "audio_file": {"type": "string", "format": "uri"},
         "webhook": {"type": "string", "format": "uri"},
         "id": {"type": "string"},
-        "option": {"type": ["string", "integer"]}
+        "option": {"type": ["string", "integer"]},
+        "output": {"type": "string", "enum": ["transcript", "srt", "vtt", "ass"]}
     },
     "required": ["audio_file"],
     "additionalProperties": False
@@ -27,6 +30,7 @@ def transcribe(job_id, data):
     webhook_url = data.get('webhook')
     id = data.get('id', job_id)
     words_per_subtitle = data.get('option')
+    output_type = data.get('output', 'transcript')
 
     logger.info(f"Job {id}: Received transcription request for {audio_file}")
 
@@ -36,16 +40,29 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        transcription = perform_transcription(audio_file, words_per_subtitle)
-        result = {
-            "message": "Transcription completed",
-            "timestamps": transcription['timestamps'],
-            "transcription": transcription['text_segments'],
-            "durations": transcription['duration_sentences'],
-            "split_sentence_durations": transcription['duration_splitsentence'],
-            "srt_format": transcription['srt_format'],
-            "job_id": id
-        }
+        transcription = perform_transcription(audio_file, words_per_subtitle, output_type)
+
+        if output_type in ['srt', 'vtt', 'ass']:
+            # For file outputs, upload to GCS and return the URL
+            gcs_url = upload_to_gcs(transcription[f'{output_type}_file'])
+            os.remove(transcription[f'{output_type}_file'])  # Remove the temporary file after uploading
+            result = {
+                "message": f"Transcription completed. {output_type.upper()} file uploaded.",
+                f"{output_type}_file_url": gcs_url,
+                "job_id": id
+            }
+        else:
+            # For transcript output, return all the details
+            result = {
+                "message": "Transcription completed",
+                "timestamps": transcription['timestamps'],
+                "transcription": transcription['text_segments'],
+                "durations": transcription['duration_sentences'],
+                "split_sentence_durations": transcription['duration_splitsentence'],
+                "srt_format": transcription['srt_format'],
+                "ass_file_url": transcription['ass_file_url'],
+                "job_id": id
+            }
 
         if webhook_url:
             try:

@@ -2,10 +2,14 @@ import os
 import whisper
 import srt
 from datetime import timedelta
+from whisper.utils import WriteSRT, WriteVTT
+from services.file_management import download_file
+from services.gcp_toolkit import upload_to_gcs
 import logging
 import requests
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
+import uuid
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -102,6 +106,33 @@ def create_word_level_srt(segments, words_per_subtitle):
     
     return "\n\n".join(srt_content)
 
+def generate_ass_subtitle(segments, words_per_subtitle=None, max_chars=56):
+    """Generate ASS subtitle content, optionally with word-level timing."""
+    ass_content = ""  # Start with an empty string for flexibility
+
+    def format_time(t):
+        return f"{int(t//3600):01d}:{int((t%3600)//60):02d}:{t%60:06.3f}"
+
+    if words_per_subtitle == 1:
+        for segment in segments:
+            words = segment['text'].split()
+            segment_start = segment['start']
+            segment_end = segment['end']
+            word_duration = (segment_end - segment_start) / len(words)
+            
+            for i, word in enumerate(words):
+                start_time = segment_start + i * word_duration
+                end_time = start_time + word_duration
+                ass_content += f"Dialogue: 0,{format_time(start_time)},{format_time(end_time)},Default,,0,0,0,,{word}\n"
+    else:
+        for segment in segments:
+            start_time = format_time(segment['start'])
+            end_time = format_time(segment['end'])
+            text = segment['text'].strip()
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+
+    return ass_content
+
 def process_transcription(audio_path, output_type, words_per_subtitle=None):
     """Transcribe audio and return the transcript or SRT content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
@@ -154,15 +185,30 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None):
             else:
                 srt_format = "\n\n".join(srt_format)
 
+            # Generate ASS subtitle content
+            ass_content = generate_ass_subtitle(result['segments'], words_per_subtitle, max_chars=56)
+            
+            # Write the ASS content to a temporary file
+            temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
+            with open(temp_ass_filename, 'w') as f:
+                f.write(ass_content)
+            
+            # Upload the ASS file to GCS and get the URL
+            ass_gcs_url = upload_to_gcs(temp_ass_filename)
+            
+            # Remove the temporary ASS file
+            os.remove(temp_ass_filename)
+
             output = {
                 'transcript': "\n".join(transcript),
                 'timestamps': timestamps,
                 'text_segments': text_segments,
                 'duration_sentences': duration_sentences,
                 'duration_splitsentence': duration_splitsentence,
-                'srt_format': srt_format
+                'srt_format': srt_format,
+                'ass_file_url': ass_gcs_url  # Add the ASS file URL to the output
             }
-            logger.info("Transcript with timestamps, sentence durations, split sentence durations, and SRT format generated")
+            logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
         elif output_type == 'srt':
             srt_subtitles = []
             for i, segment in enumerate(result['segments'], start=1):
@@ -211,7 +257,8 @@ def perform_transcription(audio_file, words_per_subtitle=None):
             'text_segments': transcription['text_segments'],
             'duration_sentences': transcription['duration_sentences'],
             'duration_splitsentence': transcription['duration_splitsentence'],
-            'srt_format': transcription['srt_format']
+            'srt_format': transcription['srt_format'],
+            'ass_file_url': transcription['ass_file_url']
         }
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
