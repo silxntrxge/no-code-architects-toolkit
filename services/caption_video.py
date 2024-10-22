@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Add this section to handle fonts correctly
-FONTS_DIR = '/usr/share/fonts/truetype/custom'
+FONTS_DIR = '/usr/share/fonts/custom'
 FONT_PATHS = {}
 
 if os.path.exists(FONTS_DIR):
@@ -26,8 +26,14 @@ if os.path.exists(FONTS_DIR):
 else:
     logger.warning(f"Custom fonts directory not found: {FONTS_DIR}")
 
+def convert_options_to_dict(options):
+    if isinstance(options, list):
+        return {item.get("option"): item.get("value") for item in options if "option" in item and "value" in item}
+    return options if isinstance(options, dict) else {}
+
 def generate_style_line(options):
     """Generate ASS style line from options."""
+    options = convert_options_to_dict(options)
     style_options = {
         'Name': 'Default',
         'Fontname': options.get('font_name', 'Arial'),
@@ -105,11 +111,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
 
-        options = convert_array_to_collection(options)
-
         # Default FFmpeg options
         ffmpeg_options = {
-            'font_name': None,
+            'font_name': 'Arial',  # Set a default font
             'font_size': 12,
             'primary_color': None,
             'secondary_color': None,
@@ -221,6 +225,3 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     except Exception as e:
         logger.error(f"Job {job_id}: Unexpected error in process_captioning: {str(e)}")
         raise
-
-def convert_array_to_collection(options):
-    return {item["option"]: item["value"] for item in options}

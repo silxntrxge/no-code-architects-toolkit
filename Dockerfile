@@ -141,6 +141,13 @@ COPY . .
 # Debugging step to list routes directory
 RUN ls -l /app/routes
 
+# Copy custom fonts to the container
+COPY ./fonts /usr/share/fonts/custom
+
+# Update font permissions and rebuild font cache
+RUN chmod 644 /usr/share/fonts/custom/* && \
+    fc-cache -f -v
+
 # Create a non-root user and switch to it
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
