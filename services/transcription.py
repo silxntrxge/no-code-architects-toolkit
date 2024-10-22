@@ -10,6 +10,7 @@ import requests
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 import uuid
+import tempfile
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -258,30 +259,36 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
 
 def perform_transcription(audio_file, words_per_subtitle=None, output_type='transcript'):
     logger.info(f"Starting transcription for file: {audio_file}")
+    temp_file = None
     try:
         # Download the file if it's a URL
         if audio_file.startswith('http'):
             logger.info(f"Downloading file from URL: {audio_file}")
             response = requests.get(audio_file)
             if response.status_code == 200:
-                temp_file = 'temp_audio_file'
-                with open(temp_file, 'wb') as f:
-                    f.write(response.content)
-                audio_file = temp_file
-                logger.info(f"File downloaded successfully to: {temp_file}")
+                # Use tempfile to create a temporary file
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+                temp_file.write(response.content)
+                temp_file.close()
+                audio_file = temp_file.name
+                logger.info(f"File downloaded successfully to: {audio_file}")
             else:
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
+
+        # Check if the file exists
+        if not os.path.exists(audio_file):
+            raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
         # Perform transcription
         transcription = process_transcription(audio_file, output_type, words_per_subtitle)
         
-        # Clean up temporary file if it was created
-        if audio_file == 'temp_audio_file':
-            os.remove(audio_file)
-            logger.info("Temporary file removed")
-
         logger.info("Transcription completed successfully")
         return transcription
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
+    finally:
+        # Clean up temporary file if it was created
+        if temp_file and os.path.exists(temp_file.name):
+            os.unlink(temp_file.name)
+            logger.info(f"Temporary file removed: {temp_file.name}")
