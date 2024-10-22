@@ -151,43 +151,39 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             logger.info(f"Job {job_id}: Full ASS header: {caption_style}")
 
         # Construct FFmpeg filter options for subtitles with detailed styling
-        subtitle_filter = f"subtitles={srt_path}:force_style='"
-        style_options = {
-            'FontFile': ffmpeg_options['font_name'],
-            'FontSize': ffmpeg_options['font_size'],
-            'PrimaryColour': ffmpeg_options['primary_color'],
-            'SecondaryColour': ffmpeg_options['secondary_color'],
-            'OutlineColour': ffmpeg_options['outline_color'],
-            'BackColour': ffmpeg_options['back_color'],
-            'Bold': ffmpeg_options['bold'],
-            'Italic': ffmpeg_options['italic'],
-            'Underline': ffmpeg_options['underline'],
-            'StrikeOut': ffmpeg_options['strikeout'],
-            'Alignment': ffmpeg_options['alignment'],
-            'MarginV': ffmpeg_options['margin_v'],
-            'MarginL': ffmpeg_options['margin_l'],
-            'MarginR': ffmpeg_options['margin_r'],
-            'Outline': ffmpeg_options['outline'],
-            'Shadow': ffmpeg_options['shadow'],
-            'Blur': ffmpeg_options['blur'],
-            'BorderStyle': ffmpeg_options['border_style'],
-            'Encoding': ffmpeg_options['encoding'],
-            'Spacing': ffmpeg_options['spacing'],
-            'Angle': ffmpeg_options['angle'],
-            'UpperCase': ffmpeg_options['uppercase']
-        }
-
         if caption_type == 'ass':
-            # Use the subtitles filter without force_style
             subtitle_filter = f"subtitles='{srt_path}'"
-            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
-            logger.info(f"Job {job_id}: Content of ASS file:")
-            with open(srt_path, 'r') as f:
-                logger.info(f.read())
+        else:
+            subtitle_filter = f"subtitles='{srt_path}':force_style='"
+            style_options = {
+                'FontName': options.get('font_name', 'Arial'),
+                'FontSize': options.get('font_size', 24),
+                'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
+                'SecondaryColour': options.get('secondary_color', '&H00000000'),
+                'OutlineColour': options.get('outline_color', '&H00000000'),
+                'BackColour': options.get('back_color', '&H00000000'),
+                'Bold': options.get('bold', 0),
+                'Italic': options.get('italic', 0),
+                'Underline': options.get('underline', 0),
+                'StrikeOut': options.get('strikeout', 0),
+                'Alignment': options.get('alignment', 2),
+                'MarginV': options.get('margin_v', 10),
+                'MarginL': options.get('margin_l', 10),
+                'MarginR': options.get('margin_r', 10),
+                'Outline': options.get('outline', 1),
+                'Shadow': options.get('shadow', 0),
+                'Blur': options.get('blur', 0),
+                'BorderStyle': options.get('border_style', 1),
+                'Encoding': options.get('encoding', 1),
+                'Spacing': options.get('spacing', 0),
+                'Angle': options.get('angle', 0)
+            }
 
-        # Add only populated options to the subtitle filter
-        subtitle_filter += ','.join(f"{k}={v}" for k, v in style_options.items() if v is not None)
-        subtitle_filter += "'"
+            # Add only populated options to the subtitle filter
+            subtitle_filter += ','.join(f"{k}={v}" for k, v in style_options.items() if v is not None)
+            subtitle_filter += "'"
+
+        logger.info(f"Job {job_id}: Using subtitle filter: {subtitle_filter}")
 
         try:
             # Log the FFmpeg command for debugging
@@ -198,7 +194,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).run(capture_stdout=True, capture_stderr=True)
+            ).overwrite_output().run(capture_stdout=True, capture_stderr=True)
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
