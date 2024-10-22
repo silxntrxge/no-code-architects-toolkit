@@ -37,6 +37,34 @@ FONT_PATHS = {
     'Korean Bold': '/usr/share/fonts/truetype/custom/Korean-Bold.ttf'
 }
 
+def generate_style_line(options):
+    """Generate ASS style line from options."""
+    style_options = {
+        'Name': 'Default',
+        'Fontname': options.get('font_name', 'Arial'),
+        'Fontsize': options.get('font_size', 24),
+        'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
+        'OutlineColour': options.get('outline_color', '&H00000000'),
+        'BackColour': options.get('back_color', '&H00000000'),
+        'Bold': options.get('bold', 0),
+        'Italic': options.get('italic', 0),
+        'Underline': options.get('underline', 0),
+        'StrikeOut': options.get('strikeout', 0),
+        'ScaleX': 100,
+        'ScaleY': 100,
+        'Spacing': 0,
+        'Angle': 0,
+        'BorderStyle': 1,
+        'Outline': options.get('outline', 1),
+        'Shadow': options.get('shadow', 0),
+        'Alignment': options.get('alignment', 2),
+        'MarginL': options.get('margin_l', 10),
+        'MarginR': options.get('margin_r', 10),
+        'MarginV': options.get('margin_v', 10),
+        'Encoding': options.get('encoding', 1)
+    }
+    return f"Style: {','.join(str(v) for v in style_options.values())}"
+
 def process_captioning(file_url, caption_srt, caption_type, options, job_id):
     """Process video captioning using FFmpeg."""
     try:
