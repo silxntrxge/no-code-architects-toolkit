@@ -14,28 +14,13 @@ STORAGE_PATH = "/tmp/"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define the font paths
-FONT_PATHS = {
-    'Arial': '/usr/share/fonts/truetype/custom/Arial.ttf',
-    'Libre Baskerville': '/usr/share/fonts/truetype/custom/LibreBaskerville-Regular.ttf',
-    'Lobster': '/usr/share/fonts/truetype/custom/Lobster-Regular.ttf',
-    'Luckiest Guy': '/usr/share/fonts/truetype/custom/LuckiestGuy-Regular.ttf',
-    'Nanum Pen Script': '/usr/share/fonts/truetype/custom/NanumPenScript-Regular.ttf',
-    'Nunito': '/usr/share/fonts/truetype/custom/Nunito-Regular.ttf',
-    'Pacifico': '/usr/share/fonts/truetype/custom/Pacifico-Regular.ttf',
-    'Roboto': '/usr/share/fonts/truetype/custom/Roboto-Regular.ttf',
-    'Comic Neue': '/usr/share/fonts/truetype/custom/ComicNeue-Regular.ttf',
-    'Oswald': '/usr/share/fonts/truetype/custom/Oswald-Regular.ttf',
-    'Oswald Bold': '/usr/share/fonts/truetype/custom/Oswald-Bold.ttf',
-    'Shrikhand': '/usr/share/fonts/truetype/custom/Shrikhand-Regular.ttf',
-    'Fredericka the Great': '/usr/share/fonts/truetype/custom/FrederickatheGreat-Regular.ttf',
-    'Permanent Marker': '/usr/share/fonts/truetype/custom/PermanentMarker-Regular.ttf',
-    'Simplified Chinese': '/usr/share/fonts/truetype/custom/SimplifiedChinese.ttf',
-    'Traditional Chinese': '/usr/share/fonts/truetype/custom/TraditionalChinese.ttf',
-    'Japanese': '/usr/share/fonts/truetype/custom/Japanese.ttf',
-    'Korean': '/usr/share/fonts/truetype/custom/Korean.ttf',
-    'Korean Bold': '/usr/share/fonts/truetype/custom/Korean-Bold.ttf'
-}
+# Add this section to handle fonts correctly
+FONTS_DIR = '/usr/share/fonts/custom'
+FONT_PATHS = {}
+for font_file in os.listdir(FONTS_DIR):
+    if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
+        font_name = os.path.splitext(font_file)[0]
+        FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
 
 def generate_style_line(options):
     """Generate ASS style line from options."""
@@ -72,7 +57,8 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         video_path = download_file(file_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
 
-        srt_path = os.path.join(STORAGE_PATH, f"{job_id}.srt")
+        subtitle_extension = '.ass'
+        srt_path = os.path.join(STORAGE_PATH, f"{job_id}{subtitle_extension}")
 
         if caption_srt.startswith("https"):
             # Download the file if caption_srt is a URL
@@ -80,8 +66,13 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
             response = requests.get(caption_srt)
             response.raise_for_status()  # Raise an exception for bad status codes
             
-            with open(srt_path, 'wb') as srt_file:
-                srt_file.write(response.content)
+            if caption_type == 'ass':
+                subtitle_content = caption_style + response.text
+                with open(srt_path, 'w') as srt_file:
+                    srt_file.write(subtitle_content)
+            else:
+                with open(srt_path, 'wb') as srt_file:
+                    srt_file.write(response.content)
             
             logger.info(f"Job {job_id}: Caption file downloaded to {srt_path}")
         else:
@@ -154,7 +145,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if caption_type == 'ass':
             subtitle_filter = f"subtitles='{srt_path}'"
         else:
-            subtitle_filter = f"subtitles='{srt_path}':force_style='"
+            subtitle_filter = f"subtitles={srt_path}:force_style='"
             style_options = {
                 'FontName': options.get('font_name', 'Arial'),
                 'FontSize': options.get('font_size', 24),
@@ -194,16 +185,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).overwrite_output().run(capture_stdout=True, capture_stderr=True)
+            ).run(capture_stdout=True, capture_stderr=True)
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
-            # Log the FFmpeg stderr output
-            error_message = 'Unknown FFmpeg error'
             if e.stderr:
-                try:
-                    error_message = e.stderr.decode('utf8')
-                except AttributeError:
-                    error_message = str(e.stderr)
+                error_message = e.stderr.decode('utf8')
+            else:
+                error_message = 'Unknown FFmpeg error'
             logger.error(f"Job {job_id}: FFmpeg error: {error_message}")
             raise
 
