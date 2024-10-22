@@ -15,12 +15,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Add this section to handle fonts correctly
-FONTS_DIR = '/usr/share/fonts/custom'
+FONTS_DIR = '/usr/share/fonts/truetype/custom'
 FONT_PATHS = {}
-for font_file in os.listdir(FONTS_DIR):
-    if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
-        font_name = os.path.splitext(font_file)[0]
-        FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
+
+if os.path.exists(FONTS_DIR):
+    for font_file in os.listdir(FONTS_DIR):
+        if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
+            font_name = os.path.splitext(font_file)[0]
+            FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
+else:
+    logger.warning(f"Custom fonts directory not found: {FONTS_DIR}")
 
 def generate_style_line(options):
     """Generate ASS style line from options."""
