@@ -122,7 +122,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Default,Arial,12,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -250,7 +250,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result, max_chars, words_per_subtitle)
+            ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
             
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
@@ -290,7 +290,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 )
                 logger.info("Transcription completed with word-level timestamps")
                 # Generate ASS subtitle content
-                ass_content = generate_ass_subtitle(result, max_chars)
+                ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
                 logger.info("Generated ASS subtitle content")
                 
                 # Write the ASS content to a file
