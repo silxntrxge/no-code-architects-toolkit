@@ -275,12 +275,16 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output
         elif output_type in ['srt', 'vtt', 'ass']:
+            output_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
+            
             if output_type == 'srt':
                 writer = WriteSRT(output_dir=STORAGE_PATH)
                 temp_filename = writer(result, audio_path)
+                os.rename(temp_filename, output_filename)
             elif output_type == 'vtt':
                 writer = WriteVTT(output_dir=STORAGE_PATH)
                 temp_filename = writer(result, audio_path)
+                os.rename(temp_filename, output_filename)
             elif output_type == 'ass':
                 result = model.transcribe(
                     audio_path,
@@ -289,23 +293,17 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                     verbose=False
                 )
                 logger.info("Transcription completed with word-level timestamps")
-                # Generate ASS subtitle content
-                ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
+                ass_content = generate_ass_subtitle(result, max_chars)
                 logger.info("Generated ASS subtitle content")
                 
-                # Write the ASS content to a file
-                output_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
                 with open(output_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
-                output = output_filename
-                logger.info(f"Generated {output_type.upper()} output: {output}")
             
-            return {f'{output_type}_file': output}
+            logger.info(f"Generated {output_type.upper()} output: {output_filename}")
+            return output_filename
         else:
             raise ValueError(f"Invalid output type: {output_type}")
 
-        logger.info("Transcription process completed successfully")
-        return output
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
@@ -337,10 +335,16 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
         # Perform transcription
-        transcription = process_transcription(audio_file, output_type, words_per_subtitle)
+        transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
         
-        logger.info("Transcription completed successfully")
-        return transcription
+        # If the result is a file path (for srt, vtt, ass), upload it to GCS
+        if output_type in ['srt', 'vtt', 'ass']:
+            gcs_url = upload_to_gcs(transcription_result)
+            logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
+            return {f'{output_type}_file_url': gcs_url}
+        else:
+            return transcription_result
+
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
@@ -349,4 +353,3 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
-
