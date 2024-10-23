@@ -194,22 +194,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             font_name = os.path.basename(font_path)
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
         elif font_name in FONT_PATHS:
-            selected_font = FONT_PATHS[font_name]
-            logger.info(f"Job {job_id}: Font path set to {selected_font}")
+            font_path = FONT_PATHS[font_name]
+            logger.info(f"Job {job_id}: Font path set to {font_path}")
         else:
-            selected_font = FONT_PATHS.get('Arial')
+            font_path = FONT_PATHS.get('Arial')
             logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
-            # Use the subtitles filter without force_style
-            subtitle_filter = f"subtitles='{srt_path}'"
-            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
+            # Use the subtitles filter with fontfile
+            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}'"
+            logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
-            subtitle_filter = f"subtitles={srt_path}:force_style='"
+            subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
             style_options = {
-                'FontName': font_name,  # Use the font name instead of the font file path
+                'FontName': font_name,
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
