@@ -1,5 +1,4 @@
 import os
-import shutil
 import ffmpeg
 import logging
 import requests
@@ -18,20 +17,15 @@ STORAGE_PATH = "/tmp/"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define the path to the custom fonts directory
-CUSTOM_FONTS_DIR = os.path.join(STORAGE_PATH, 'custom_fonts')
-os.makedirs(CUSTOM_FONTS_DIR, exist_ok=True)
+# Define the path to the fonts directory
+FONTS_DIR = '/usr/share/fonts/custom'
 
-# Define the path to the system fonts directory
-SYSTEM_FONTS_DIR = '/usr/share/fonts/custom'
-
-# Create the FONT_PATHS dictionary by reading both font directories
+# Create the FONT_PATHS dictionary by reading the fonts directory
 FONT_PATHS = {}
-for fonts_dir in [SYSTEM_FONTS_DIR, CUSTOM_FONTS_DIR]:
-    for font_file in os.listdir(fonts_dir):
-        if font_file.endswith(('.ttf', '.TTF', '.otf', '.woff')):
-            font_name = os.path.splitext(font_file)[0]
-            FONT_PATHS[font_name] = os.path.join(fonts_dir, font_file)
+for font_file in os.listdir(FONTS_DIR):
+    if font_file.endswith('.ttf') or font_file.endswith('.TTF') or font_file.endswith('.otf') or font_file.endswith('.woff'):
+        font_name = os.path.splitext(font_file)[0]
+        FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
 
 # Create a list of acceptable font names
 ACCEPTABLE_FONTS = list(FONT_PATHS.keys())
@@ -102,10 +96,10 @@ def download_and_verify_font(font_url, job_id):
         # Generate a unique filename based on the URL
         url_hash = hashlib.md5(font_url.encode()).hexdigest()
         
-        # Check if a font with this hash already exists in CUSTOM_FONTS_DIR
-        existing_fonts = [f for f in os.listdir(CUSTOM_FONTS_DIR) if f.startswith(f"font_{url_hash}")]
+        # Check if a font with this hash already exists
+        existing_fonts = [f for f in os.listdir(FONTS_DIR) if f.startswith(url_hash)]
         if existing_fonts:
-            font_path = os.path.join(CUSTOM_FONTS_DIR, existing_fonts[0])
+            font_path = os.path.join(FONTS_DIR, existing_fonts[0])
             logger.info(f"Job {job_id}: Font already exists at {font_path}")
             return font_path
         
@@ -126,10 +120,10 @@ def download_and_verify_font(font_url, job_id):
             ext = '.ttf'  # Default to .ttf if no extension
         
         # Create the new filename
-        new_filename = f"font_{url_hash}{ext}"
-        font_path = os.path.join(CUSTOM_FONTS_DIR, new_filename)
+        new_filename = f"{url_hash}{ext}"
+        font_path = os.path.join(FONTS_DIR, new_filename)
         
-        # Write the content to the file
+        # Write the content to a file
         with open(font_path, 'wb') as f:
             f.write(response.content)
         
@@ -141,10 +135,6 @@ def download_and_verify_font(font_url, job_id):
         if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
             os.remove(font_path)
             raise ValueError(f"Unsupported MIME type: {mime_type}")
-        
-        # Set permissions for the font file
-        os.chmod(font_path, 0o644)
-        logger.info(f"Job {job_id}: Permissions set for {font_path}")
         
         # Update FONT_PATHS dictionary
         font_name = os.path.splitext(new_filename)[0]
@@ -162,9 +152,6 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         logger.info(f"Job {job_id}: Starting download of file from {file_url}")
         video_path = download_file(file_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
-
-        # Set permissions for the video file
-        os.chmod(video_path, 0o644)
 
         subtitle_extension = '.' + caption_type
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}{subtitle_extension}")
@@ -205,54 +192,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 srt_file.write(subtitle_content)
             logger.info(f"Job {job_id}: SRT file created at {srt_path}")
 
-        # Set permissions for the subtitle file
-        os.chmod(srt_path, 0o644)
-
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
         logger.info(f"Job {job_id}: Output path set to {output_path}")
 
         font_path = None
         font_name = options.get('font_name', 'Arial')
         logger.info(f"Job {job_id}: Font name from options: {font_name}")
-        
         if font_name.startswith('http'):
             # Download and verify the font
             logger.info(f"Job {job_id}: Attempting to download font from URL: {font_name}")
             font_path = download_and_verify_font(font_name, job_id)
             font_name = os.path.splitext(os.path.basename(font_path))[0]
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
+        elif font_name in FONT_PATHS:
+            font_path = FONT_PATHS[font_name]
+            logger.info(f"Job {job_id}: Font path set to {font_path}")
         else:
-            # Check in custom fonts directory first
-            custom_font_path = os.path.join(CUSTOM_FONTS_DIR, f"{font_name}.ttf")
-            if os.path.exists(custom_font_path):
-                font_path = custom_font_path
-                logger.info(f"Job {job_id}: Using custom font from {font_path}")
-            # Then check in system fonts directory
-            elif font_name in FONT_PATHS:
-                font_path = FONT_PATHS[font_name]
-                logger.info(f"Job {job_id}: Using system font from {font_path}")
-            else:
-                font_path = FONT_PATHS.get('Arial')
-                logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
-
-        # Ensure the font file is readable
-        if font_path:
-            os.chmod(font_path, 0o644)
-            logger.info(f"Job {job_id}: Set read permissions for font file: {font_path}")
+            font_path = FONT_PATHS.get('Arial')
+            logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
-            # Use the subtitles filter with explicit font directory
-            font_dir = os.path.dirname(font_path)
-            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{font_dir}'"
-            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
+            # Use the subtitles filter with fontconfig
+            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}'"
+            logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
-            font_dir = os.path.dirname(font_path)
-            subtitle_filter = f"subtitles={srt_path}:fontsdir='{font_dir}':force_style='"
-            
+            subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
             style_options = {
-                'FontName': os.path.basename(font_path),
+                'FontName': font_name,
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
@@ -290,15 +258,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).overwrite_output().run(capture_stdout=True, capture_stderr=True)
+            ).run()
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
-
-            # Set permissions for the output file
-            os.chmod(output_path, 0o644)
-
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
-            error_message = e.stderr.decode('utf8') if e.stderr else 'Unknown FFmpeg error'
+            if e.stderr:
+                error_message = e.stderr.decode('utf8')
+            else:
+                error_message = 'Unknown FFmpeg error'
             logger.error(f"Job {job_id}: FFmpeg error: {error_message}")
             raise
 
