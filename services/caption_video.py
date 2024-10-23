@@ -90,32 +90,43 @@ def generate_style_line(options):
 def download_and_verify_font(font_url, job_id):
     """Download font file and verify its format."""
     try:
-        # Check if it's a Google Drive link
-        if 'drive.google.com' in font_url:
-            # Extract the file ID from the Google Drive URL
-            parsed_url = urlparse(font_url)
-            if parsed_url.path.startswith('/file/d/'):
-                file_id = parsed_url.path.split('/')[3]
-            else:
-                file_id = parse_qs(parsed_url.query).get('id', [None])[0]
-            
-            if not file_id:
-                raise ValueError("Unable to extract file ID from Google Drive URL")
-            
-            # Construct the direct download link
-            font_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-
-        logger.info(f"Job {job_id}: Downloading font from {font_url}")
-        font_path = download_file(font_url, STORAGE_PATH)
+        logger.info(f"Job {job_id}: Attempting to download font from URL: {font_url}")
+        
+        # Download the file
+        response = requests.get(font_url, allow_redirects=True)
+        response.raise_for_status()
+        
+        # Try to get the filename from the Content-Disposition header
+        content_disposition = response.headers.get('Content-Disposition')
+        if content_disposition:
+            filename = re.findall("filename=(.+)", content_disposition)[0].strip('"')
+        else:
+            filename = os.path.basename(urlparse(font_url).path)
+        
+        logger.info(f"Job {job_id}: Detected filename: {filename}")
+        
+        # Ensure the filename has an extension
+        if not os.path.splitext(filename)[1]:
+            filename += '.ttf'  # Default to .ttf if no extension
+            logger.info(f"Job {job_id}: Added default extension. New filename: {filename}")
+        
+        font_path = os.path.join(STORAGE_PATH, filename)
+        
+        # Write the content to a file
+        with open(font_path, 'wb') as f:
+            f.write(response.content)
+        
         logger.info(f"Job {job_id}: Font downloaded to {font_path}")
         
         # Check file extension
         _, ext = os.path.splitext(font_path)
+        logger.info(f"Job {job_id}: Font file extension: {ext}")
         if ext.lower() not in ['.otf', '.ttf', '.woff']:
             raise ValueError(f"Unsupported font format: {ext}")
         
         # Verify MIME type
         mime_type, _ = mimetypes.guess_type(font_path)
+        logger.info(f"Job {job_id}: Detected MIME type: {mime_type}")
         if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
             raise ValueError(f"Unsupported MIME type: {mime_type}")
         
@@ -175,8 +186,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         font_path = None
         font_name = options.get('font_name', 'Arial')
+        logger.info(f"Job {job_id}: Font name from options: {font_name}")
         if font_name.startswith('http'):
             # Download and verify the font
+            logger.info(f"Job {job_id}: Attempting to download font from URL: {font_name}")
             font_path = download_and_verify_font(font_name, job_id)
             font_name = os.path.basename(font_path)
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
