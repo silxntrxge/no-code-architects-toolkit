@@ -15,24 +15,24 @@ logger = logging.getLogger(__name__)
 @validate_payload({
     "type": "object",
     "properties": {
-        "audio_file": {"type": "string", "format": "uri"},
+        "media_url": {"type": "string", "format": "uri"},
         "webhook": {"type": "string", "format": "uri"},
         "id": {"type": "string"},
         "option": {"type": ["string", "integer"]},
         "output": {"type": "string", "enum": ["transcript", "srt", "vtt", "ass"]}
     },
-    "required": ["audio_file"],
+    "required": ["media_url"],
     "additionalProperties": False
 })
 @queue_task_wrapper(bypass_queue=False)
 def transcribe(job_id, data):
-    audio_file = data['audio_file']
+    media_url = data['media_url']
     webhook_url = data.get('webhook')
     id = data.get('id', job_id)
     words_per_subtitle = data.get('option')
     output_type = data.get('output', 'transcript')
 
-    logger.info(f"Job {id}: Received transcription request for {audio_file}")
+    logger.info(f"Job {id}: Received transcription request for {media_url}")
 
     try:
         if words_per_subtitle:
@@ -40,29 +40,16 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        transcription = perform_transcription(audio_file, words_per_subtitle, output_type)
+        result = perform_transcription(media_url, words_per_subtitle, output_type)
 
-        if output_type in ['srt', 'vtt', 'ass']:
-            # For file outputs, upload to GCS and return the URL
-            gcs_url = upload_to_gcs(transcription[f'{output_type}_file'])
-            os.remove(transcription[f'{output_type}_file'])  # Remove the temporary file after uploading
-            result = {
-                "message": f"Transcription completed. {output_type.upper()} file uploaded.",
-                f"{output_type}_file_url": gcs_url,
-                "job_id": id
-            }
+        if 'ass_file_url' in result:
+            return jsonify({'ass_file_url': result['ass_file_url']})
+        elif 'srt_file_url' in result:
+            return jsonify({'srt_file_url': result['srt_file_url']})
+        elif 'vtt_file_url' in result:
+            return jsonify({'vtt_file_url': result['vtt_file_url']})
         else:
-            # For transcript output, return all the details
-            result = {
-                "message": "Transcription completed",
-                "timestamps": transcription['timestamps'],
-                "transcription": transcription['text_segments'],
-                "durations": transcription['duration_sentences'],
-                "split_sentence_durations": transcription['duration_splitsentence'],
-                "srt_format": transcription['srt_format'],
-                "ass_file_url": transcription['ass_file_url'],
-                "job_id": id
-            }
+            return jsonify(result)
 
         if webhook_url:
             try:

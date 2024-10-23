@@ -286,38 +286,43 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
             os.remove(audio_path)
             logger.info(f"Removed temporary file: {audio_path}")
 
-def perform_transcription(audio_file, words_per_subtitle=None, output_type='transcript'):
-    logger.info(f"Starting transcription for file: {audio_file}")
+def perform_transcription(media_url, words_per_subtitle=None, output_type='transcript'):
+    logger.info(f"Starting transcription for file: {media_url}")
     temp_file = None
     try:
         # Download the file if it's a URL
-        if audio_file.startswith('http'):
-            logger.info(f"Downloading file from URL: {audio_file}")
-            response = requests.get(audio_file)
+        if media_url.startswith('http'):
+            logger.info(f"Downloading file from URL: {media_url}")
+            response = requests.get(media_url)
             if response.status_code == 200:
                 # Use tempfile to create a temporary file
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
                 temp_file.write(response.content)
                 temp_file.close()
-                audio_file = temp_file.name
-                logger.info(f"File downloaded successfully to: {audio_file}")
+                audio_path = temp_file.name
+                logger.info(f"File downloaded successfully to: {audio_path}")
             else:
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
+        else:
+            audio_path = media_url
 
         # Check if the file exists
-        if not os.path.exists(audio_file):
-            raise FileNotFoundError(f"Audio file not found: {audio_file}")
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
         # Perform transcription
-        transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
+        transcription_result = process_transcription(audio_path, output_type, words_per_subtitle)
         
-        # If the result is a file path (for srt, vtt, ass), upload it to GCS
-        if output_type in ['srt', 'vtt', 'ass']:
+        if isinstance(transcription_result, dict):
+            # For 'transcript' output_type
+            return transcription_result
+        elif isinstance(transcription_result, str):
+            # For 'srt', 'vtt', 'ass' output_types
             gcs_url = upload_to_gcs(transcription_result)
             logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
             return {f'{output_type}_file_url': gcs_url}
         else:
-            return transcription_result
+            raise ValueError(f"Unexpected result type: {type(transcription_result)}")
 
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
@@ -327,4 +332,3 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
-

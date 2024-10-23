@@ -23,7 +23,7 @@ FONTS_DIR = '/usr/share/fonts/custom'
 # Create the FONT_PATHS dictionary by reading the fonts directory
 FONT_PATHS = {}
 for font_file in os.listdir(FONTS_DIR):
-    if font_file.endswith('.ttf') or font_file.endswith('.TTF') or font_file.endswith('.otf') or font_file.endswith('.woff'):
+    if font_file.endswith(('.ttf', '.TTF', '.otf', '.OTF', '.woff', '.WOFF')):
         font_name = os.path.splitext(font_file)[0]
         FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
 
@@ -59,6 +59,9 @@ def match_fonts():
         logger.error(f"Exception while matching fonts: {str(e)}")
 
 match_fonts()
+
+# After scanning FONTS_DIR
+logger.info(f"Detected fonts: {', '.join(FONT_PATHS.keys())}")
 
 def generate_style_line(options):
     """Generate ASS style line from options."""
@@ -132,7 +135,7 @@ def download_and_verify_font(font_url, job_id):
         # Verify MIME type
         mime_type, _ = mimetypes.guess_type(font_path)
         logger.info(f"Job {job_id}: Detected MIME type: {mime_type}")
-        if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
+        if mime_type not in ['font/otf', 'font/ttf', 'font/woff', 'application/font-woff', 'application/x-font-ttf', 'application/x-font-otf']:
             os.remove(font_path)
             raise ValueError(f"Unsupported MIME type: {mime_type}")
         
@@ -198,15 +201,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         font_path = None
         font_name = options.get('font_name', 'Arial')
         logger.info(f"Job {job_id}: Font name from options: {font_name}")
-        if font_name.startswith('http'):
+
+        # Case-insensitive font matching
+        font_name_lower = font_name.lower()
+        matching_fonts = [f for f in FONT_PATHS.keys() if f.lower() == font_name_lower]
+
+        if matching_fonts:
+            font_path = FONT_PATHS[matching_fonts[0]]
+            logger.info(f"Job {job_id}: Font path set to {font_path}")
+        elif font_name.startswith('http'):
             # Download and verify the font
             logger.info(f"Job {job_id}: Attempting to download font from URL: {font_name}")
             font_path = download_and_verify_font(font_name, job_id)
             font_name = os.path.splitext(os.path.basename(font_path))[0]
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
-        elif font_name in FONT_PATHS:
-            font_path = FONT_PATHS[font_name]
-            logger.info(f"Job {job_id}: Font path set to {font_path}")
         else:
             font_path = FONT_PATHS.get('Arial')
             logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
@@ -286,3 +294,4 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def convert_array_to_collection(options):
     logger.info(f"Converting options array to dictionary: {options}")
     return {item["option"]: item["value"] for item in options if isinstance(item, dict) and "option" in item and "value" in item}
+
