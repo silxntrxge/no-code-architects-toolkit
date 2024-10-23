@@ -1,4 +1,5 @@
 import os
+import shutil
 import ffmpeg
 import logging
 import requests
@@ -89,21 +90,21 @@ def generate_style_line(options):
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
 def download_and_verify_font(font_url, job_id):
-    """Download font file, verify its format, and store it in the storage directory."""
+    """Download font file, verify its format, and move it to the custom fonts directory."""
     try:
         logger.info(f"Job {job_id}: Attempting to download font from URL: {font_url}")
         
         # Generate a unique filename based on the URL
         url_hash = hashlib.md5(font_url.encode()).hexdigest()
         
-        # Check if a font with this hash already exists in STORAGE_PATH
-        existing_fonts = [f for f in os.listdir(STORAGE_PATH) if f.startswith(f"font_{url_hash}")]
+        # Check if a font with this hash already exists in FONTS_DIR
+        existing_fonts = [f for f in os.listdir(FONTS_DIR) if f.startswith(f"font_{url_hash}")]
         if existing_fonts:
-            font_path = os.path.join(STORAGE_PATH, existing_fonts[0])
+            font_path = os.path.join(FONTS_DIR, existing_fonts[0])
             logger.info(f"Job {job_id}: Font already exists at {font_path}")
             return font_path
         
-        # If not, download the font
+        # If not, download the font to a temporary location
         response = requests.get(font_url, allow_redirects=True)
         response.raise_for_status()
         
@@ -121,22 +122,36 @@ def download_and_verify_font(font_url, job_id):
         
         # Create the new filename
         new_filename = f"font_{url_hash}{ext}"
-        font_path = os.path.join(STORAGE_PATH, new_filename)
+        temp_font_path = os.path.join(STORAGE_PATH, new_filename)
         
-        # Write the content to a file
-        with open(font_path, 'wb') as f:
+        # Write the content to a temporary file
+        with open(temp_font_path, 'wb') as f:
             f.write(response.content)
         
-        logger.info(f"Job {job_id}: Font downloaded to {font_path}")
+        logger.info(f"Job {job_id}: Font downloaded to temporary location: {temp_font_path}")
         
         # Verify MIME type
-        mime_type, _ = mimetypes.guess_type(font_path)
+        mime_type, _ = mimetypes.guess_type(temp_font_path)
         logger.info(f"Job {job_id}: Detected MIME type: {mime_type}")
         if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
-            os.remove(font_path)
+            os.remove(temp_font_path)
             raise ValueError(f"Unsupported MIME type: {mime_type}")
         
-        return font_path
+        # Move the font to the custom fonts directory
+        final_font_path = os.path.join(FONTS_DIR, new_filename)
+        shutil.move(temp_font_path, final_font_path)
+        logger.info(f"Job {job_id}: Font moved to {final_font_path}")
+        
+        # Set permissions for the font file
+        os.chmod(final_font_path, 0o644)
+        logger.info(f"Job {job_id}: Permissions set for {final_font_path}")
+        
+        # Update FONT_PATHS dictionary
+        font_name = os.path.splitext(new_filename)[0]
+        FONT_PATHS[font_name] = final_font_path
+        ACCEPTABLE_FONTS.append(font_name)
+        
+        return final_font_path
     except Exception as e:
         logger.error(f"Job {job_id}: Error downloading or verifying font: {str(e)}")
         raise
