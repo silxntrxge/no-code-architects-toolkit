@@ -6,6 +6,8 @@ import subprocess
 from services.file_management import download_file
 from services.gcp_toolkit import upload_to_gcs, GCP_BUCKET_NAME
 import mimetypes
+import re
+from urllib.parse import urlparse, parse_qs
 
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
@@ -88,6 +90,22 @@ def generate_style_line(options):
 def download_and_verify_font(font_url, job_id):
     """Download font file and verify its format."""
     try:
+        # Check if it's a Google Drive link
+        if 'drive.google.com' in font_url:
+            # Extract the file ID from the Google Drive URL
+            parsed_url = urlparse(font_url)
+            if parsed_url.path.startswith('/file/d/'):
+                file_id = parsed_url.path.split('/')[3]
+            else:
+                file_id = parse_qs(parsed_url.query).get('id', [None])[0]
+            
+            if not file_id:
+                raise ValueError("Unable to extract file ID from Google Drive URL")
+            
+            # Construct the direct download link
+            font_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+        logger.info(f"Job {job_id}: Downloading font from {font_url}")
         font_path = download_file(font_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: Font downloaded to {font_path}")
         
