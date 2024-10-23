@@ -200,17 +200,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             font_path = FONT_PATHS.get('Arial')
             logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
-        # Create a temporary fonts.conf file
-        fonts_conf = f"""<?xml version="1.0"?>
-<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-<fontconfig>
-  <dir>{os.path.dirname(font_path)}</dir>
-</fontconfig>
-"""
-        fonts_conf_path = os.path.join(STORAGE_PATH, f"{job_id}_fonts.conf")
-        with open(fonts_conf_path, 'w') as f:
-            f.write(fonts_conf)
-
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
             # Use the subtitles filter with fontconfig
@@ -257,9 +246,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             ffmpeg.input(video_path).output(
                 output_path,
                 vf=subtitle_filter,
-                acodec='copy',
-                **{'fontconfig': fonts_conf_path}  # Add fontconfig option
-            ).run()
+                acodec='copy'
+            ).global_args('-fonts', os.path.dirname(font_path)).run()
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
@@ -278,7 +266,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.remove(video_path)
         os.remove(srt_path)
         os.remove(output_path)
-        os.remove(fonts_conf_path)  # Remove the temporary fonts.conf file
         if font_path:
             os.remove(font_path)
             logger.info(f"Job {job_id}: Downloaded font removed")
