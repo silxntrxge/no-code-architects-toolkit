@@ -15,24 +15,24 @@ logger = logging.getLogger(__name__)
 @validate_payload({
     "type": "object",
     "properties": {
-        "media_url": {"type": "string", "format": "uri"},
+        "audio_file": {"type": "string", "format": "uri"},
         "webhook": {"type": "string", "format": "uri"},
         "id": {"type": "string"},
         "option": {"type": ["string", "integer"]},
         "output": {"type": "string", "enum": ["transcript", "srt", "vtt", "ass"]}
     },
-    "required": ["media_url"],
+    "required": ["audio_file"],
     "additionalProperties": False
 })
 @queue_task_wrapper(bypass_queue=False)
 def transcribe(job_id, data):
-    media_url = data['media_url']
+    audio_file = data['audio_file']
     webhook_url = data.get('webhook')
     id = data.get('id', job_id)
     words_per_subtitle = data.get('option')
     output_type = data.get('output', 'transcript')
 
-    logger.info(f"Job {id}: Received transcription request for {media_url}")
+    logger.info(f"Job {id}: Received transcription request for {audio_file}")
 
     try:
         if words_per_subtitle:
@@ -40,7 +40,7 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        result = perform_transcription(media_url, words_per_subtitle, output_type)
+        result = perform_transcription(audio_file, words_per_subtitle, output_type)
 
         if 'ass_file_url' in result:
             return jsonify({'ass_file_url': result['ass_file_url']})
