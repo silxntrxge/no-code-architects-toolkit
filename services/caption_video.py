@@ -221,8 +221,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             font_path = download_and_verify_font(font_name, job_id)
             font_name = os.path.splitext(os.path.basename(font_path))[0]
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
-            # Set permissions for the downloaded font file
-            os.chmod(font_path, 0o644)
         else:
             # Check in custom fonts directory first
             custom_font_path = os.path.join(CUSTOM_FONTS_DIR, f"{font_name}.ttf")
@@ -237,11 +235,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 font_path = FONT_PATHS.get('Arial')
                 logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
+        # Ensure the font file is readable
+        if font_path:
+            os.chmod(font_path, 0o644)
+            logger.info(f"Job {job_id}: Set read permissions for font file: {font_path}")
+
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
             # Use the subtitles filter with explicit font directory
             font_dir = os.path.dirname(font_path)
-            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{font_dir}':force_style='FontName={os.path.basename(font_path)}'"
+            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{font_dir}'"
             logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
@@ -287,7 +290,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).run()
+            ).overwrite_output().run(capture_stdout=True, capture_stderr=True)
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
 
             # Set permissions for the output file
@@ -295,10 +298,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
-            if e.stderr:
-                error_message = e.stderr.decode('utf8')
-            else:
-                error_message = 'Unknown FFmpeg error'
+            error_message = e.stderr.decode('utf8') if e.stderr else 'Unknown FFmpeg error'
             logger.error(f"Job {job_id}: FFmpeg error: {error_message}")
             raise
 
