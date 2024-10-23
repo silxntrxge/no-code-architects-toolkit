@@ -114,22 +114,8 @@ def generate_ass_subtitle(result, max_chars):
     """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
     logger.info("Generate ASS subtitle content with highlighted current words")
     
-    # ASS file header and styles
-    ass_content = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 384
-PlayResY: 288
-ScaledBorderAndShadow: yes
+    ass_content = ""
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,12,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
-
-    # Helper function to format time
     def format_time(t):
         hours = int(t // 3600)
         minutes = int((t % 3600) // 60)
@@ -139,13 +125,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     max_chars_per_line = max_chars  # Maximum characters per line
 
-    # Process each segment
     for segment in result['segments']:
         words = segment.get('words', [])
         if not words:
             continue  # Skip if no word-level timestamps
 
-        # Group words into lines
         lines = []
         current_line = []
         current_line_length = 0
@@ -161,32 +145,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if current_line:
             lines.append(current_line)
 
-        # Generate events for each line
         for line in lines:
-            line_start_time = line[0]['start']
-            line_end_time = line[-1]['end']
-
-            # Generate events for highlighting each word
             for i, word_info in enumerate(line):
                 start_time = word_info['start']
                 end_time = word_info['end'] if i + 1 == len(line) else line[i + 1]['start']
 
-                # Build the line text with highlighted current word
                 caption_parts = []
                 for w in line:
                     word_text = w['word'].strip()
                     if w == word_info:
-                        # Highlight current word
                         caption_parts.append(r'{\c&H00FFFF&}' + word_text + r'{\c&HFFFFFF&}')
                     else:
                         caption_parts.append(word_text)
                 caption_with_highlight = ' '.join(caption_parts)
 
-                # Format times
                 start = format_time(start_time)
                 end = format_time(end_time)
 
-                # Add the dialogue line
                 ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
 
     return ass_content
