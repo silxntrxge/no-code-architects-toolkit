@@ -5,6 +5,7 @@ import requests
 import subprocess
 from services.file_management import download_file
 from services.gcp_toolkit import upload_to_gcs, GCP_BUCKET_NAME
+import mimetypes
 
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
@@ -84,6 +85,27 @@ def generate_style_line(options):
     }
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
+def download_and_verify_font(font_url, job_id):
+    """Download font file and verify its format."""
+    try:
+        font_path = download_file(font_url, STORAGE_PATH)
+        logger.info(f"Job {job_id}: Font downloaded to {font_path}")
+        
+        # Check file extension
+        _, ext = os.path.splitext(font_path)
+        if ext.lower() not in ['.otf', '.ttf', '.woff']:
+            raise ValueError(f"Unsupported font format: {ext}")
+        
+        # Verify MIME type
+        mime_type, _ = mimetypes.guess_type(font_path)
+        if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
+            raise ValueError(f"Unsupported MIME type: {mime_type}")
+        
+        return font_path
+    except Exception as e:
+        logger.error(f"Job {job_id}: Error downloading or verifying font: {str(e)}")
+        raise
+
 def process_captioning(file_url, caption_srt, caption_type, options, job_id):
     """Process video captioning using FFmpeg."""
     try:
@@ -133,9 +155,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
         logger.info(f"Job {job_id}: Output path set to {output_path}")
 
-        # Ensure font_name is converted to the full font path
+        font_path = None
         font_name = options.get('font_name', 'Arial')
-        if font_name in FONT_PATHS:
+        if font_name.startswith('http'):
+            # Download and verify the font
+            font_path = download_and_verify_font(font_name, job_id)
+            font_name = os.path.basename(font_path)
+            logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
+        elif font_name in FONT_PATHS:
             selected_font = FONT_PATHS[font_name]
             logger.info(f"Job {job_id}: Font path set to {selected_font}")
         else:
@@ -208,10 +235,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.remove(video_path)
         os.remove(srt_path)
         os.remove(output_path)
+        if font_path:
+            os.remove(font_path)
+            logger.info(f"Job {job_id}: Downloaded font removed")
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
     except Exception as e:
         logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
+        # Ensure cleanup in case of error
+        if font_path and os.path.exists(font_path):
+            os.remove(font_path)
+            logger.info(f"Job {job_id}: Downloaded font removed after error")
         raise
 
 def convert_array_to_collection(options):
