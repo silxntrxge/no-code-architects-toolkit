@@ -268,6 +268,10 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 
                 with open(output_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
+                
+                # Verify the file size after writing
+                file_size = os.path.getsize(output_filename)
+                logger.info(f"ASS file size after writing: {file_size} bytes")
             
             logger.info(f"Generated {output_type.upper()} output: {output_filename}")
             return output_filename
