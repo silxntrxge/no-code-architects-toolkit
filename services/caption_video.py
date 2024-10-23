@@ -2,8 +2,7 @@ import os
 import ffmpeg
 import logging
 import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+import subprocess
 from services.file_management import download_file
 from services.gcp_toolkit import upload_to_gcs, GCP_BUCKET_NAME
 
@@ -14,26 +13,51 @@ STORAGE_PATH = "/tmp/"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add this section to handle fonts correctly
+# Define the path to the fonts directory
 FONTS_DIR = '/usr/share/fonts/custom'
+
+# Create the FONT_PATHS dictionary by reading the fonts directory
 FONT_PATHS = {}
+for font_file in os.listdir(FONTS_DIR):
+    if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
+        font_name = os.path.splitext(font_file)[0]
+        FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
 
-if os.path.exists(FONTS_DIR):
-    for font_file in os.listdir(FONTS_DIR):
-        if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
-            font_name = os.path.splitext(font_file)[0]
-            FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
-else:
-    logger.warning(f"Custom fonts directory not found: {FONTS_DIR}")
+# Create a list of acceptable font names
+ACCEPTABLE_FONTS = list(FONT_PATHS.keys())
 
-def convert_options_to_dict(options):
-    if isinstance(options, list):
-        return {item.get("option"): item.get("value") for item in options if "option" in item and "value" in item}
-    return options if isinstance(options, dict) else {}
+def match_fonts():
+    try:
+        result = subprocess.run(['fc-list', ':family'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            fontconfig_fonts = result.stdout.split('\n')
+            fontconfig_fonts = list(set(fontconfig_fonts))  # Remove duplicates
+            matched_fonts = {}
+            for font_file in FONT_PATHS.keys():
+                for fontconfig_font in fontconfig_fonts:
+                    if font_file.lower() in fontconfig_font.lower():
+                        matched_fonts[font_file] = fontconfig_font.strip()
+
+            # Parse and output the matched font names
+            unique_font_names = set()
+            for font in matched_fonts.values():
+                font_name = font.split(':')[1].strip()
+                unique_font_names.add(font_name)
+            
+            # Remove duplicates from font_name and sort them alphabetically
+            unique_font_names = sorted(list(set(unique_font_names)))
+            
+            for font_name in unique_font_names:
+                print(font_name)
+        else:
+            logger.error(f"Error matching fonts: {result.stderr}")
+    except Exception as e:
+        logger.error(f"Exception while matching fonts: {str(e)}")
+
+match_fonts()
 
 def generate_style_line(options):
     """Generate ASS style line from options."""
-    options = convert_options_to_dict(options)
     style_options = {
         'Name': 'Default',
         'Fontname': options.get('font_name', 'Arial'),
@@ -67,10 +91,11 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         video_path = download_file(file_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
 
-        subtitle_extension = '.ass'
+        subtitle_extension = '.' + caption_type
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}{subtitle_extension}")
-
+        options = convert_array_to_collection(options)
         caption_style = ""
+
         if caption_type == 'ass':
             style_string = generate_style_line(options)
             caption_style = f"""
@@ -84,79 +109,49 @@ Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
             logger.info(f"Job {job_id}: Generated ASS style string: {style_string}")
-            logger.info(f"Job {job_id}: Full ASS header: {caption_style}")
 
         if caption_srt.startswith("https"):
             # Download the file if caption_srt is a URL
             logger.info(f"Job {job_id}: Downloading caption file from {caption_srt}")
             response = requests.get(caption_srt)
             response.raise_for_status()  # Raise an exception for bad status codes
-            
-            if caption_type == 'ass':
-                subtitle_content = caption_style + response.text
-                with open(srt_path, 'w', encoding='utf-8') as srt_file:
-                    srt_file.write(subtitle_content)
-            else:
+            if caption_type in ['srt','vtt']:
                 with open(srt_path, 'wb') as srt_file:
                     srt_file.write(response.content)
-            
+            else:
+                subtitle_content = caption_style + response.text
+                with open(srt_path, 'w') as srt_file:
+                    srt_file.write(subtitle_content)
             logger.info(f"Job {job_id}: Caption file downloaded to {srt_path}")
         else:
             # Write caption_srt content directly to file
-            subtitle_content = caption_style + caption_srt if caption_type == 'ass' else caption_srt
-            with open(srt_path, 'w', encoding='utf-8') as srt_file:
+            subtitle_content = caption_style + caption_srt
+            with open(srt_path, 'w') as srt_file:
                 srt_file.write(subtitle_content)
-
-        logger.info(f"Job {job_id}: SRT file created at {srt_path}")
+            logger.info(f"Job {job_id}: SRT file created at {srt_path}")
 
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
+        logger.info(f"Job {job_id}: Output path set to {output_path}")
 
-        # Default FFmpeg options
-        ffmpeg_options = {
-            'font_name': 'Arial',  # Set a default font
-            'font_size': 12,
-            'primary_color': None,
-            'secondary_color': None,
-            'outline_color': None,
-            'back_color': None,
-            'bold': None,
-            'italic': None,
-            'underline': None,
-            'strikeout': None,
-            'alignment': None,
-            'margin_v': None,
-            'margin_l': None,
-            'margin_r': None,
-            'outline': None,
-            'shadow': None,
-            'blur': None,
-            'border_style': None,
-            'encoding': None,
-            'spacing': None,
-            'angle': None,
-            'uppercase': None
-        }
-
-        # Update ffmpeg_options with provided options
-        ffmpeg_options.update(options)
-
-        # Handle downloadable font
-        font_url = ffmpeg_options['font_name']
-        if font_url and font_url.startswith('http'):
-            try:
-                temp_font_file = download_file(font_url, STORAGE_PATH, suffix='.ttf')
-                if temp_font_file:
-                    ffmpeg_options['font_name'] = temp_font_file
-                    logger.info(f"Job {job_id}: Successfully downloaded font: {temp_font_file}")
-            except Exception as e:
-                logger.error(f"Job {job_id}: Error downloading font: {str(e)}")
-
-        if caption_type == 'ass':
-            subtitle_filter = f"subtitles='{srt_path}'"
+        # Ensure font_name is converted to the full font path
+        font_name = options.get('font_name', 'Arial')
+        if font_name in FONT_PATHS:
+            selected_font = FONT_PATHS[font_name]
+            logger.info(f"Job {job_id}: Font path set to {selected_font}")
         else:
+            selected_font = FONT_PATHS.get('Arial')
+            logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
+
+        # For ASS subtitles, we should avoid overriding styles
+        if subtitle_extension == '.ass':
+            # Use the subtitles filter without force_style
+            subtitle_filter = f"subtitles='{srt_path}'"
+            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
+        else:
+            # Construct FFmpeg filter options for subtitles with detailed styling
             subtitle_filter = f"subtitles={srt_path}:force_style='"
             style_options = {
-                'FontName': options.get('font_name', 'Arial'),
+                'FontName': font_name,  # Use the font name instead of the font file path
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
@@ -176,14 +171,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 'BorderStyle': options.get('border_style', 1),
                 'Encoding': options.get('encoding', 1),
                 'Spacing': options.get('spacing', 0),
-                'Angle': options.get('angle', 0)
+                'Angle': options.get('angle', 0),
+                'UpperCase': options.get('uppercase', 0)
             }
 
             # Add only populated options to the subtitle filter
             subtitle_filter += ','.join(f"{k}={v}" for k, v in style_options.items() if v is not None)
             subtitle_filter += "'"
-
-        logger.info(f"Job {job_id}: Using subtitle filter: {subtitle_filter}")
+            logger.info(f"Job {job_id}: Using subtitle filter: {subtitle_filter}")
 
         try:
             # Log the FFmpeg command for debugging
@@ -194,9 +189,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).run(capture_stdout=True, capture_stderr=True)
+            ).run()
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
+            # Log the FFmpeg stderr output
             if e.stderr:
                 error_message = e.stderr.decode('utf8')
             else:
@@ -212,16 +208,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.remove(video_path)
         os.remove(srt_path)
         os.remove(output_path)
-        if font_url and font_url.startswith('http'):
-            os.remove(temp_font_file)
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
-    except requests.RequestException as e:
-        logger.error(f"Job {job_id}: Error downloading caption file: {str(e)}")
-        raise
-    except IOError as e:
-        logger.error(f"Job {job_id}: Error writing caption file: {str(e)}")
-        raise
     except Exception as e:
-        logger.error(f"Job {job_id}: Unexpected error in process_captioning: {str(e)}")
+        logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
         raise
+
+def convert_array_to_collection(options):
+    logger.info(f"Converting options array to dictionary: {options}")
+    return {item["option"]: item["value"] for item in options if isinstance(item, dict) and "option" in item and "value" in item}

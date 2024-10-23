@@ -113,7 +113,8 @@ def create_word_level_srt(segments, words_per_subtitle):
 def generate_ass_subtitle(result, max_chars):
     """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
     logger.info("Generate ASS subtitle content with highlighted current words")
-    # ASS file header
+    
+    # ASS file header and styles
     ass_content = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 384
@@ -128,12 +129,13 @@ Style: Default,Arial,12,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
+    # Helper function to format time
     def format_time(t):
         hours = int(t // 3600)
         minutes = int((t % 3600) // 60)
         seconds = int(t % 60)
         centiseconds = int(round((t - int(t)) * 100))
-        return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+        return f"{hours:01d}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
     max_chars_per_line = max_chars  # Maximum characters per line
 
@@ -167,28 +169,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Generate events for highlighting each word
             for i, word_info in enumerate(line):
                 start_time = word_info['start']
-                end_time = word_info['end']
-                current_word = word_info['word']
+                end_time = word_info['end'] if i + 1 == len(line) else line[i + 1]['start']
 
                 # Build the line text with highlighted current word
                 caption_parts = []
                 for w in line:
-                    word_text = w['word']
+                    word_text = w['word'].strip()
                     if w == word_info:
                         # Highlight current word
-                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+                        caption_parts.append(r'{\c&H00FFFF&}' + word_text + r'{\c&HFFFFFF&}')
                     else:
-                        # Default color
-                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
+                        caption_parts.append(word_text)
                 caption_with_highlight = ' '.join(caption_parts)
 
                 # Format times
                 start = format_time(start_time)
-                # End the dialogue event when the next word starts or at the end of the line
-                if i + 1 < len(line):
-                    end_time = line[i + 1]['start']
-                else:
-                    end_time = line_end_time
                 end = format_time(end_time)
 
                 # Add the dialogue line
@@ -353,3 +348,4 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
+
