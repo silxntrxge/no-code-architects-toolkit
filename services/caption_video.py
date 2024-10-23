@@ -8,6 +8,7 @@ from services.gcp_toolkit import upload_to_gcs, GCP_BUCKET_NAME
 import mimetypes
 import re
 from urllib.parse import urlparse, parse_qs
+import hashlib
 
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
@@ -22,7 +23,7 @@ FONTS_DIR = '/usr/share/fonts/custom'
 # Create the FONT_PATHS dictionary by reading the fonts directory
 FONT_PATHS = {}
 for font_file in os.listdir(FONTS_DIR):
-    if font_file.endswith('.ttf') or font_file.endswith('.TTF'):
+    if font_file.endswith('.ttf') or font_file.endswith('.TTF') or font_file.endswith('.otf') or font_file.endswith('.woff'):
         font_name = os.path.splitext(font_file)[0]
         FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
 
@@ -88,11 +89,21 @@ def generate_style_line(options):
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
 def download_and_verify_font(font_url, job_id):
-    """Download font file and verify its format."""
+    """Download font file, verify its format, and store it in the custom fonts directory."""
     try:
         logger.info(f"Job {job_id}: Attempting to download font from URL: {font_url}")
         
-        # Download the file
+        # Generate a unique filename based on the URL
+        url_hash = hashlib.md5(font_url.encode()).hexdigest()
+        
+        # Check if a font with this hash already exists
+        existing_fonts = [f for f in os.listdir(FONTS_DIR) if f.startswith(url_hash)]
+        if existing_fonts:
+            font_path = os.path.join(FONTS_DIR, existing_fonts[0])
+            logger.info(f"Job {job_id}: Font already exists at {font_path}")
+            return font_path
+        
+        # If not, download the font
         response = requests.get(font_url, allow_redirects=True)
         response.raise_for_status()
         
@@ -103,14 +114,14 @@ def download_and_verify_font(font_url, job_id):
         else:
             filename = os.path.basename(urlparse(font_url).path)
         
-        logger.info(f"Job {job_id}: Detected filename: {filename}")
-        
         # Ensure the filename has an extension
-        if not os.path.splitext(filename)[1]:
-            filename += '.ttf'  # Default to .ttf if no extension
-            logger.info(f"Job {job_id}: Added default extension. New filename: {filename}")
+        _, ext = os.path.splitext(filename)
+        if not ext:
+            ext = '.ttf'  # Default to .ttf if no extension
         
-        font_path = os.path.join(STORAGE_PATH, filename)
+        # Create the new filename
+        new_filename = f"{url_hash}{ext}"
+        font_path = os.path.join(FONTS_DIR, new_filename)
         
         # Write the content to a file
         with open(font_path, 'wb') as f:
@@ -118,17 +129,17 @@ def download_and_verify_font(font_url, job_id):
         
         logger.info(f"Job {job_id}: Font downloaded to {font_path}")
         
-        # Check file extension
-        _, ext = os.path.splitext(font_path)
-        logger.info(f"Job {job_id}: Font file extension: {ext}")
-        if ext.lower() not in ['.otf', '.ttf', '.woff']:
-            raise ValueError(f"Unsupported font format: {ext}")
-        
         # Verify MIME type
         mime_type, _ = mimetypes.guess_type(font_path)
         logger.info(f"Job {job_id}: Detected MIME type: {mime_type}")
         if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
+            os.remove(font_path)
             raise ValueError(f"Unsupported MIME type: {mime_type}")
+        
+        # Update FONT_PATHS dictionary
+        font_name = os.path.splitext(new_filename)[0]
+        FONT_PATHS[font_name] = font_path
+        ACCEPTABLE_FONTS.append(font_name)
         
         return font_path
     except Exception as e:
@@ -191,7 +202,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Download and verify the font
             logger.info(f"Job {job_id}: Attempting to download font from URL: {font_name}")
             font_path = download_and_verify_font(font_name, job_id)
-            font_name = os.path.basename(font_path)
+            font_name = os.path.splitext(os.path.basename(font_path))[0]
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
         elif font_name in FONT_PATHS:
             font_path = FONT_PATHS[font_name]
@@ -247,7 +258,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 output_path,
                 vf=subtitle_filter,
                 acodec='copy'
-            ).global_args('-fonts', os.path.dirname(font_path)).run()
+            ).run()
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
@@ -266,17 +277,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         os.remove(video_path)
         os.remove(srt_path)
         os.remove(output_path)
-        if font_path:
-            os.remove(font_path)
-            logger.info(f"Job {job_id}: Downloaded font removed")
         logger.info(f"Job {job_id}: Local files cleaned up")
         return output_filename
     except Exception as e:
         logger.error(f"Job {job_id}: Error in process_captioning: {str(e)}")
-        # Ensure cleanup in case of error
-        if font_path and os.path.exists(font_path):
-            os.remove(font_path)
-            logger.info(f"Job {job_id}: Downloaded font removed after error")
         raise
 
 def convert_array_to_collection(options):
