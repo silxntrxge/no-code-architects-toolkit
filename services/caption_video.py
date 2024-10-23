@@ -89,17 +89,17 @@ def generate_style_line(options):
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
 def download_and_verify_font(font_url, job_id):
-    """Download font file, verify its format, and store it in the custom fonts directory."""
+    """Download font file, verify its format, and store it in the storage directory."""
     try:
         logger.info(f"Job {job_id}: Attempting to download font from URL: {font_url}")
         
         # Generate a unique filename based on the URL
         url_hash = hashlib.md5(font_url.encode()).hexdigest()
         
-        # Check if a font with this hash already exists
-        existing_fonts = [f for f in os.listdir(FONTS_DIR) if f.startswith(url_hash)]
+        # Check if a font with this hash already exists in STORAGE_PATH
+        existing_fonts = [f for f in os.listdir(STORAGE_PATH) if f.startswith(f"font_{url_hash}")]
         if existing_fonts:
-            font_path = os.path.join(FONTS_DIR, existing_fonts[0])
+            font_path = os.path.join(STORAGE_PATH, existing_fonts[0])
             logger.info(f"Job {job_id}: Font already exists at {font_path}")
             return font_path
         
@@ -120,8 +120,8 @@ def download_and_verify_font(font_url, job_id):
             ext = '.ttf'  # Default to .ttf if no extension
         
         # Create the new filename
-        new_filename = f"{url_hash}{ext}"
-        font_path = os.path.join(FONTS_DIR, new_filename)
+        new_filename = f"font_{url_hash}{ext}"
+        font_path = os.path.join(STORAGE_PATH, new_filename)
         
         # Write the content to a file
         with open(font_path, 'wb') as f:
@@ -135,11 +135,6 @@ def download_and_verify_font(font_url, job_id):
         if mime_type not in ['font/otf', 'font/ttf', 'font/woff']:
             os.remove(font_path)
             raise ValueError(f"Unsupported MIME type: {mime_type}")
-        
-        # Update FONT_PATHS dictionary
-        font_name = os.path.splitext(new_filename)[0]
-        FONT_PATHS[font_name] = font_path
-        ACCEPTABLE_FONTS.append(font_name)
         
         return font_path
     except Exception as e:
