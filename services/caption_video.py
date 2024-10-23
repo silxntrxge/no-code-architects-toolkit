@@ -30,6 +30,9 @@ for font_file in os.listdir(FONTS_DIR):
 # Create a list of acceptable font names
 ACCEPTABLE_FONTS = list(FONT_PATHS.keys())
 
+# Set FONTCONFIG_PATH to include our custom fonts directory
+os.environ['FONTCONFIG_PATH'] = FONTS_DIR
+
 def match_fonts():
     try:
         result = subprocess.run(['fc-list', ':family'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -219,16 +222,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             font_path = FONT_PATHS.get('Arial')
             logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
+        # Ensure the font file exists
+        if not os.path.exists(font_path):
+            logger.error(f"Job {job_id}: Font file not found at {font_path}")
+            font_path = FONT_PATHS.get('Arial')
+            logger.warning(f"Job {job_id}: Falling back to Arial font")
+
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
-            # Use the subtitles filter with fontconfig
-            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}'"
+            # Use the subtitles filter with explicit font file
+            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}':force_style='FontName={os.path.basename(font_path)}'"
             logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
             subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
             style_options = {
-                'FontName': font_name,
+                'FontName': os.path.basename(font_path),  # Use the exact font file name
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
