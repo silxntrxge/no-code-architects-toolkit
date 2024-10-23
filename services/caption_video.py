@@ -148,6 +148,9 @@ def process_captioning(file_url, caption_srt, caption_type, options, job_id):
         video_path = download_file(file_url, STORAGE_PATH)
         logger.info(f"Job {job_id}: File downloaded to {video_path}")
 
+        # Set permissions for the video file
+        os.chmod(video_path, 0o644)
+
         subtitle_extension = '.' + caption_type
         srt_path = os.path.join(STORAGE_PATH, f"{job_id}{subtitle_extension}")
         options = convert_array_to_collection(options)
@@ -187,6 +190,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 srt_file.write(subtitle_content)
             logger.info(f"Job {job_id}: SRT file created at {srt_path}")
 
+        # Set permissions for the subtitle file
+        os.chmod(srt_path, 0o644)
+
         output_path = os.path.join(STORAGE_PATH, f"{job_id}_captioned.mp4")
         logger.info(f"Job {job_id}: Output path set to {output_path}")
 
@@ -199,6 +205,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             font_path = download_and_verify_font(font_name, job_id)
             font_name = os.path.splitext(os.path.basename(font_path))[0]
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
+            # Set permissions for the downloaded font file
+            os.chmod(font_path, 0o644)
         elif font_name in FONT_PATHS:
             font_path = FONT_PATHS[font_name]
             logger.info(f"Job {job_id}: Font path set to {font_path}")
@@ -255,6 +263,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 acodec='copy'
             ).run()
             logger.info(f"Job {job_id}: FFmpeg processing completed, output file at {output_path}")
+
+            # Set permissions for the output file
+            os.chmod(output_path, 0o644)
+
         except ffmpeg.Error as e:
             # Log the FFmpeg stderr output
             if e.stderr:
