@@ -239,21 +239,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
-            # Use the subtitles filter with explicit font file
-            if font_path.startswith('/tmp/custom_fonts/'):
-                subtitle_filter = f"subtitles='{srt_path}':fontfile='{font_path}':force_style='FontName={font_name}'"
-            else:
-                subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}':force_style='FontName={font_name}'"
+            # Use the subtitles filter with explicit font directory
+            font_dir = os.path.dirname(font_path)
+            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{font_dir}':force_style='FontName={os.path.basename(font_path)}'"
             logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
-            if font_path.startswith('/tmp/custom_fonts/'):
-                subtitle_filter = f"subtitles={srt_path}:fontfile='{font_path}':force_style='"
-            else:
-                subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
+            font_dir = os.path.dirname(font_path)
+            subtitle_filter = f"subtitles={srt_path}:fontsdir='{font_dir}':force_style='"
             
             style_options = {
-                'FontName': font_name,
+                'FontName': os.path.basename(font_path),
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
