@@ -214,6 +214,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         font_path = None
         font_name = options.get('font_name', 'Arial')
         logger.info(f"Job {job_id}: Font name from options: {font_name}")
+        
         if font_name.startswith('http'):
             # Download and verify the font
             logger.info(f"Job {job_id}: Attempting to download font from URL: {font_name}")
@@ -222,21 +223,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             logger.info(f"Job {job_id}: Using downloaded font: {font_name}")
             # Set permissions for the downloaded font file
             os.chmod(font_path, 0o644)
-        elif font_name in FONT_PATHS:
-            font_path = FONT_PATHS[font_name]
-            logger.info(f"Job {job_id}: Font path set to {font_path}")
         else:
-            font_path = FONT_PATHS.get('Arial')
-            logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
+            # Check in custom fonts directory first
+            custom_font_path = os.path.join(CUSTOM_FONTS_DIR, f"{font_name}.ttf")
+            if os.path.exists(custom_font_path):
+                font_path = custom_font_path
+                logger.info(f"Job {job_id}: Using custom font from {font_path}")
+            # Then check in system fonts directory
+            elif font_name in FONT_PATHS:
+                font_path = FONT_PATHS[font_name]
+                logger.info(f"Job {job_id}: Using system font from {font_path}")
+            else:
+                font_path = FONT_PATHS.get('Arial')
+                logger.warning(f"Job {job_id}: Font {font_name} not found. Using default font Arial.")
 
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
             # Use the subtitles filter with explicit font file
-            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}':force_style='FontName={font_name}'"
-            logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
+            if font_path.startswith('/tmp/custom_fonts/'):
+                subtitle_filter = f"subtitles='{srt_path}':fontfile='{font_path}':force_style='FontName={font_name}'"
+            else:
+                subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}':force_style='FontName={font_name}'"
+            logger.info(f"Job {job_id}: Using ASS subtitle filter: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
-            subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
+            if font_path.startswith('/tmp/custom_fonts/'):
+                subtitle_filter = f"subtitles={srt_path}:fontfile='{font_path}':force_style='"
+            else:
+                subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
+            
             style_options = {
                 'FontName': font_name,
                 'FontSize': options.get('font_size', 24),
