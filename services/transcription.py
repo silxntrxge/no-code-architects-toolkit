@@ -295,7 +295,6 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             logger.info(f"Downloading file from URL: {audio_file}")
             response = requests.get(audio_file)
             if response.status_code == 200:
-                # Use tempfile to create a temporary file
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
                 temp_file.write(response.content)
                 temp_file.close()
@@ -304,15 +303,27 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             else:
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
 
-        # Check if the file exists
         if not os.path.exists(audio_file):
             raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
         # Perform transcription
         transcription_result = process_transcription(audio_file, 'transcript', words_per_subtitle)
         
-        # The ASS content is already generated in process_transcription, so we don't need to generate it again
-        ass_gcs_url = transcription_result['ass_file_url']
+        # Generate ASS file
+        model = whisper.load_model("base")
+        result = model.transcribe(audio_file, word_timestamps=True)
+        ass_content = generate_ass_subtitle(result, 56)  # Using default max_chars of 56
+        
+        # Write ASS content to a temporary file
+        temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
+        with open(temp_ass_filename, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+        
+        # Upload ASS file to GCS
+        ass_gcs_url = upload_to_gcs(temp_ass_filename)
+        
+        # Remove the temporary ASS file
+        os.remove(temp_ass_filename)
 
         # Prepare the result
         result = {
@@ -344,7 +355,6 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         logger.error(f"Error during transcription: {str(e)}")
         raise
     finally:
-        # Clean up temporary file if it was created
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
