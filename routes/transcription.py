@@ -49,8 +49,13 @@ def transcribe(job_id, data):
                 gcs_url = upload_to_gcs(transcription)
                 os.remove(transcription)  # Remove the temporary file after uploading
                 result = {
-                    "message": f"Transcription completed. {output_type.upper()} file uploaded.",
+                    "message": f"Transcription ass completed. {output_type.upper()} file uploaded.",
                     f"{output_type}_file_url": gcs_url,
+                    "timestamps": transcription['timestamps'],
+                    "transcription": transcription['text_segments'],
+                    "durations": transcription['duration_sentences'],
+                    "split_sentence_durations": transcription['duration_splitsentence'],
+                    "srt_format": transcription['srt_format'],
                     "job_id": id
                 }
             else:
