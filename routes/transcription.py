@@ -50,7 +50,7 @@ def transcribe(job_id, data):
             'duration_sentences': result['duration_sentences'],
             'duration_splitsentence': result['duration_splitsentence'],
             'srt_format': result['srt_format'],
-            'ass_file_url': result['ass_file_url']
+            'ass_file_url': result['gcs_url']
         }
 
         # Add specific output URLs if they exist
