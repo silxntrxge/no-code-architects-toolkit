@@ -311,18 +311,8 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         # Perform transcription
         transcription_result = process_transcription(audio_file, 'transcript', words_per_subtitle)
         
-        # Generate ASS file
-        ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
-        ass_content = generate_ass_subtitle(transcription_result, max_chars=56)
-        with open(ass_filename, 'w', encoding='utf-8') as f:
-            f.write(ass_content)
-        
-        # Upload ASS file to GCS
-        ass_gcs_url = upload_to_gcs(ass_filename)
-        logger.info(f"Uploaded ASS file to GCS: {ass_gcs_url}")
-        
-        # Remove temporary ASS file
-        os.remove(ass_filename)
+        # The ASS content is already generated in process_transcription, so we don't need to generate it again
+        ass_gcs_url = transcription_result['ass_file_url']
 
         # Prepare the result
         result = {
