@@ -111,9 +111,8 @@ def create_word_level_srt(segments, words_per_subtitle):
     return "\n\n".join(srt_content)
 
 def generate_ass_subtitle(result, max_chars):
-    """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
+    """Generate ASS subtitle content with highlighted current words, showing the full line each time."""
     logger.info("Generate ASS subtitle content with highlighted current words")
-    
     ass_content = ""
 
     def format_time(t):
@@ -146,22 +145,34 @@ def generate_ass_subtitle(result, max_chars):
             lines.append(current_line)
 
         for line in lines:
+            line_start_time = line[0]['start']
+            line_end_time = line[-1]['end']
+
             for i, word_info in enumerate(line):
                 start_time = word_info['start']
-                end_time = word_info['end'] if i + 1 == len(line) else line[i + 1]['start']
 
+                # Build the line text with highlighted current word
                 caption_parts = []
                 for w in line:
-                    word_text = w['word'].strip()
+                    word_text = w['word']
                     if w == word_info:
-                        caption_parts.append(r'{\c&H00FFFF&}' + word_text + r'{\c&HFFFFFF&}')
+                        # Highlight current word
+                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
                     else:
-                        caption_parts.append(word_text)
+                        # Default color
+                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
                 caption_with_highlight = ' '.join(caption_parts)
 
+                # Format times
                 start = format_time(start_time)
+                # End the dialogue event when the next word starts or at the end of the line
+                if i + 1 < len(line):
+                    end_time = line[i + 1]['start']
+                else:
+                    end_time = line_end_time
                 end = format_time(end_time)
 
+                # Add the dialogue line
                 ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
 
     return ass_content
@@ -332,14 +343,32 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         # Perform transcription
         transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
         
+        # Generate ASS file regardless of output_type
+        model = whisper.load_model("base")
+        result = model.transcribe(audio_file, word_timestamps=True, task='transcribe', verbose=False)
+        ass_content = generate_ass_subtitle(result, max_chars=56)  # You may want to make max_chars configurable
+        
+        # Write ASS content to a temporary file
+        temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
+        with open(temp_ass_filename, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+        
+        # Upload ASS file to GCS
+        ass_gcs_url = upload_to_gcs(temp_ass_filename)
+        logger.info(f"Uploaded ASS file to GCS: {ass_gcs_url}")
+        
+        # Remove the temporary ASS file
+        os.remove(temp_ass_filename)
+        
         if isinstance(transcription_result, dict):
             # For 'transcript' output_type
+            transcription_result['ass_file_url'] = ass_gcs_url
             return transcription_result
         elif isinstance(transcription_result, str):
             # For 'srt', 'vtt', 'ass' output_types
             gcs_url = upload_to_gcs(transcription_result)
             logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
-            return {f'{output_type}_file_url': gcs_url}
+            return {f'{output_type}_file_url': gcs_url, 'ass_file_url': ass_gcs_url}
         else:
             raise ValueError(f"Unexpected result type: {type(transcription_result)}")
 
