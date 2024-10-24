@@ -309,21 +309,46 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
         # Perform transcription
-        transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
+        transcription_result = process_transcription(audio_file, 'transcript', words_per_subtitle)
         
-        if isinstance(transcription_result, dict):
-            # For 'transcript' output_type
-            return transcription_result
-        elif isinstance(transcription_result, str):
-            # For 'srt', 'vtt', 'ass' output_types
-            gcs_url = upload_to_gcs(transcription_result)
-            logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
-            if output_type == 'ass':
-                return {'ass_file_url': gcs_url}
-            else:
-                return {f'{output_type}_file_url': gcs_url}
-        else:
-            raise ValueError(f"Unexpected result type: {type(transcription_result)}")
+        # Generate ASS file
+        ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
+        ass_content = generate_ass_subtitle(transcription_result, max_chars=56)
+        with open(ass_filename, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+        
+        # Upload ASS file to GCS
+        ass_gcs_url = upload_to_gcs(ass_filename)
+        logger.info(f"Uploaded ASS file to GCS: {ass_gcs_url}")
+        
+        # Remove temporary ASS file
+        os.remove(ass_filename)
+
+        # Prepare the result
+        result = {
+            'transcript': transcription_result['transcript'],
+            'timestamps': transcription_result['timestamps'],
+            'text_segments': transcription_result['text_segments'],
+            'duration_sentences': transcription_result['duration_sentences'],
+            'duration_splitsentence': transcription_result['duration_splitsentence'],
+            'srt_format': transcription_result['srt_format'],
+            'ass_file_url': ass_gcs_url
+        }
+
+        # Generate additional output if requested
+        if output_type in ['srt', 'vtt']:
+            output_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
+            if output_type == 'srt':
+                writer = WriteSRT(output_dir=STORAGE_PATH)
+            else:  # vtt
+                writer = WriteVTT(output_dir=STORAGE_PATH)
+            temp_filename = writer(transcription_result, audio_file)
+            os.rename(temp_filename, output_filename)
+            gcs_url = upload_to_gcs(output_filename)
+            result[f'{output_type}_file_url'] = gcs_url
+            os.remove(output_filename)
+
+        return result
 
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
