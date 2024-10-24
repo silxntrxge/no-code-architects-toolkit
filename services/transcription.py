@@ -21,8 +21,7 @@ STORAGE_PATH = "/tmp/"
 
 # Check and download necessary NLTK data
 nltk_data_path = os.path.join(os.getenv('HOME'), 'nltk_data')
-if not os.path.exists(nltk_data_path):
-    os.makedirs(nltk_data_path)
+os.makedirs(nltk_data_path, exist_ok=True)  # Use exist_ok=True to avoid FileExistsError
 
 try:
     nltk.data.find('tokenizers/punkt')
