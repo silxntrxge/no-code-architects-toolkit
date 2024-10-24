@@ -42,18 +42,26 @@ def transcribe(job_id, data):
 
         result = perform_transcription(audio_file, words_per_subtitle, output_type)
 
-        if 'ass_file_url' in result:
-            return jsonify({'ass_file_url': result['ass_file_url']})
-        elif 'srt_file_url' in result:
-            return jsonify({'srt_file_url': result['srt_file_url']})
-        elif 'vtt_file_url' in result:
-            return jsonify({'vtt_file_url': result['vtt_file_url']})
-        else:
-            return jsonify(result)
+        # Always return the full result
+        response = {
+            'transcript': result['transcript'],
+            'timestamps': result['timestamps'],
+            'text_segments': result['text_segments'],
+            'duration_sentences': result['duration_sentences'],
+            'duration_splitsentence': result['duration_splitsentence'],
+            'srt_format': result['srt_format'],
+            'ass_file_url': result['ass_file_url']
+        }
+
+        # Add specific output URLs if they exist
+        if 'srt_file_url' in result:
+            response['srt_file_url'] = result['srt_file_url']
+        if 'vtt_file_url' in result:
+            response['vtt_file_url'] = result['vtt_file_url']
 
         if webhook_url:
             try:
-                webhook_response = requests.post(webhook_url, json=result)
+                webhook_response = requests.post(webhook_url, json=response)
                 if webhook_response.status_code == 200:
                     logger.info(f"Job {id}: Successfully sent transcription to webhook: {webhook_url}")
                     return jsonify({"message": "Transcription completed and sent to webhook"}), 200
@@ -64,7 +72,7 @@ def transcribe(job_id, data):
                 logger.error(f"Job {id}: Error sending transcription to webhook: {str(webhook_error)}")
                 return jsonify({"error": "Error sending transcription to webhook"}), 500
         else:
-            return jsonify(result), 200
+            return jsonify(response), 200
 
     except Exception as e:
         error_message = f"Job {id}: Transcription error - {str(e)}"

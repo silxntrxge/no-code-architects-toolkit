@@ -319,65 +319,81 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
             logger.info(f"Removed temporary file: {audio_path}")
 
 def perform_transcription(audio_file, words_per_subtitle=None, output_type='transcript'):
-    logger.info(f"Starting transcription for file: {audio_file}")
-    temp_file = None
     try:
-        # Download the file if it's a URL
-        if audio_file.startswith('http'):
-            logger.info(f"Downloading file from URL: {audio_file}")
-            response = requests.get(audio_file)
-            if response.status_code == 200:
-                # Use tempfile to create a temporary file
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
-                temp_file.write(response.content)
-                temp_file.close()
-                audio_file = temp_file.name
-                logger.info(f"File downloaded successfully to: {audio_file}")
-            else:
-                raise Exception(f"Failed to download file. Status code: {response.status_code}")
-
-        # Check if the file exists
-        if not os.path.exists(audio_file):
-            raise FileNotFoundError(f"Audio file not found: {audio_file}")
-
-        # Perform transcription
-        transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
+        # Download the audio file
+        audio_path = download_file(audio_file)
         
-        # Generate ASS file regardless of output_type
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Downloaded audio file not found: {audio_path}")
+
+        # Load the model and transcribe
         model = whisper.load_model("base")
-        result = model.transcribe(audio_file, word_timestamps=True, task='transcribe', verbose=False)
-        ass_content = generate_ass_subtitle(result, max_chars=56)  # You may want to make max_chars configurable
-        
-        # Write ASS content to a temporary file
-        temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
-        with open(temp_ass_filename, 'w', encoding='utf-8') as f:
-            f.write(ass_content)
-        
+        result = model.transcribe(audio_path, language=None)
+
+        # Process the transcription result
+        transcript = []
+        timestamps = []
+        text_segments = []
+        duration_sentences = []
+        duration_splitsentence = []
+
+        for segment in result['segments']:
+            start_time = segment['start']
+            end_time = segment['end']
+            text = segment['text'].strip()
+            
+            formatted_start = format_timestamp(start_time)
+            formatted_end = format_timestamp(end_time)
+            transcript.append(f"{formatted_start} - {formatted_end}: {text}")
+            timestamps.append(f"{formatted_start}-{formatted_end}")
+            text_segments.append(text)
+            duration = end_time - start_time
+            duration_sentences.append(str(round(duration, 2)))
+            
+            part1, part2, duration1, duration2 = split_sentence(text, start_time, end_time)
+            duration_splitsentence.extend([str(duration1), str(duration2)])
+
+        # Generate SRT format
+        srt_format = create_word_level_srt(result['segments'], words_per_subtitle) if words_per_subtitle else "\n\n".join([
+            f"{i}\n{format_timestamp(s['start']).replace('.', ',')} --> {format_timestamp(s['end']).replace('.', ',')}\n{s['text']}"
+            for i, s in enumerate(result['segments'], start=1)
+        ])
+
+        # Generate ASS format
+        ass_content = generate_ass_subtitle(result, max_chars=56)
+
         # Upload ASS file to GCS
-        ass_gcs_url = upload_to_gcs(temp_ass_filename)
-        logger.info(f"Uploaded ASS file to GCS: {ass_gcs_url}")
-        
-        # Remove the temporary ASS file
-        os.remove(temp_ass_filename)
-        
-        if isinstance(transcription_result, dict):
-            # For 'transcript' output_type
-            transcription_result['ass_file_url'] = ass_gcs_url
-            return transcription_result
-        elif isinstance(transcription_result, str):
-            # For 'srt', 'vtt', 'ass' output_types
-            gcs_url = upload_to_gcs(transcription_result)
-            logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
-            return {f'{output_type}_file_url': gcs_url, 'ass_file_url': ass_gcs_url}
-        else:
-            raise ValueError(f"Unexpected result type: {type(transcription_result)}")
+        ass_filename = f"transcription_{uuid.uuid4()}.ass"
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ass') as temp_ass_file:
+            temp_ass_file.write(ass_content)
+            temp_ass_path = temp_ass_file.name
+
+        ass_gcs_url = upload_to_gcs(temp_ass_path, ass_filename, content_type='text/plain')
+
+        # Clean up temporary files
+        os.remove(temp_ass_path)
+        os.remove(audio_path)
+
+        # Prepare the result dictionary
+        result = {
+            'transcript': "\n".join(transcript),
+            'timestamps': timestamps,
+            'text_segments': text_segments,
+            'duration_sentences': duration_sentences,
+            'duration_splitsentence': duration_splitsentence,
+            'srt_format': srt_format,
+            'ass_file_url': ass_gcs_url
+        }
+
+        # Add specific output based on output_type
+        if output_type == 'srt':
+            result['srt_file_url'] = upload_to_gcs(srt_format, f"transcription_{uuid.uuid4()}.srt", content_type='text/plain')
+        elif output_type == 'vtt':
+            vtt_content = generate_vtt(text_segments)
+            result['vtt_file_url'] = upload_to_gcs(vtt_content, f"transcription_{uuid.uuid4()}.vtt", content_type='text/plain')
+
+        return result
 
     except Exception as e:
-        logger.error(f"Error during transcription: {str(e)}")
+        logger.error(f"Transcription error: {str(e)}")
         raise
-    finally:
-        # Clean up temporary file if it was created
-        if temp_file and os.path.exists(temp_file.name):
-            os.unlink(temp_file.name)
-            logger.info(f"Temporary file removed: {temp_file.name}")
-
