@@ -145,35 +145,23 @@ def generate_ass_subtitle(result, max_chars):
             lines.append(current_line)
 
         for line in lines:
-            line_start_time = line[0]['start']
-            line_end_time = line[-1]['end']
-
             for i, word_info in enumerate(line):
                 start_time = word_info['start']
+                end_time = word_info['end'] if i + 1 == len(line) else line[i + 1]['start']
 
-                # Build the line text with highlighted current word
-                caption_parts = []
-                for w in line:
-                    word_text = w['word']
-                    if w == word_info:
-                        # Highlight current word
-                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+                highlighted_line = []
+                for j, w in enumerate(line):
+                    if j == i:
+                        highlighted_line.append(r'{\c&H00FFFF&} ' + w['word'] + r' {\c&HFFFFFF&}')
                     else:
-                        # Default color
-                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
-                caption_with_highlight = ' '.join(caption_parts)
+                        highlighted_line.append(r'{\c&HFFFFFF&} ' + w['word'] + r' ')
+                
+                highlighted_text = ''.join(highlighted_line).strip()
 
-                # Format times
                 start = format_time(start_time)
-                # End the dialogue event when the next word starts or at the end of the line
-                if i + 1 < len(line):
-                    end_time = line[i + 1]['start']
-                else:
-                    end_time = line_end_time
                 end = format_time(end_time)
 
-                # Add the dialogue line
-                ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
+                ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{highlighted_text}\n"
 
     return ass_content
 
@@ -380,4 +368,3 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
-
