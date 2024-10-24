@@ -16,17 +16,12 @@ import tempfile
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# Download necessary NLTK data
+nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
+
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
-
-# Check and download necessary NLTK data
-nltk_data_path = os.path.join(os.getenv('HOME'), 'nltk_data')
-os.makedirs(nltk_data_path, exist_ok=True)  # Use exist_ok=True to avoid FileExistsError
-
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
 
 def process_transcription(media_url, output_type, max_chars=56, language=None):
     """Transcribe media and return the transcript, SRT or ASS file path."""
