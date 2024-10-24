@@ -368,7 +368,7 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             temp_ass_file.write(ass_content)
             temp_ass_path = temp_ass_file.name
 
-        ass_gcs_url = upload_to_gcs(temp_ass_path, ass_filename, content_type='text/plain')
+        ass_gcs_url = upload_to_gcs(temp_ass_path, ass_filename)
 
         # Clean up temporary files
         os.remove(temp_ass_path)
@@ -387,13 +387,31 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
 
         # Add specific output based on output_type
         if output_type == 'srt':
-            result['srt_file_url'] = upload_to_gcs(srt_format, f"transcription_{uuid.uuid4()}.srt", content_type='text/plain')
+            srt_filename = f"transcription_{uuid.uuid4()}.srt"
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.srt') as temp_srt_file:
+                temp_srt_file.write(srt_format)
+                temp_srt_path = temp_srt_file.name
+            result['srt_file_url'] = upload_to_gcs(temp_srt_path, srt_filename)
+            os.remove(temp_srt_path)
         elif output_type == 'vtt':
             vtt_content = generate_vtt(text_segments)
-            result['vtt_file_url'] = upload_to_gcs(vtt_content, f"transcription_{uuid.uuid4()}.vtt", content_type='text/plain')
+            vtt_filename = f"transcription_{uuid.uuid4()}.vtt"
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vtt') as temp_vtt_file:
+                temp_vtt_file.write(vtt_content)
+                temp_vtt_path = temp_vtt_file.name
+            result['vtt_file_url'] = upload_to_gcs(temp_vtt_path, vtt_filename)
+            os.remove(temp_vtt_path)
 
         return result
 
     except Exception as e:
         logger.error(f"Transcription error: {str(e)}")
         raise
+
+def generate_vtt(text_segments):
+    vtt_content = "WEBVTT\n\n"
+    for i, segment in enumerate(text_segments, start=1):
+        start_time = format_timestamp(segment['start']).replace('.', ':')
+        end_time = format_timestamp(segment['end']).replace('.', ':')
+        vtt_content += f"{start_time} --> {end_time}\n{segment['text']}\n\n"
+    return vtt_content
