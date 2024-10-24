@@ -71,7 +71,7 @@ def generate_style_line(options):
     style_options = {
         'Name': 'Default',
         'Fontname': options.get('font_name', 'Arial'),
-        'Fontsize': options.get('font_size', 24),
+        'Fontsize': options.get('font_size', 12),
         'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
         'OutlineColour': options.get('outline_color', '&H00000000'),
         'BackColour': options.get('back_color', '&H00000000'),
@@ -83,14 +83,15 @@ def generate_style_line(options):
         'ScaleY': 100,
         'Spacing': 0,
         'Angle': 0,
-        'BorderStyle': 1,
-        'Outline': options.get('outline', 1),
+        'BorderStyle': 0,
+        'Outline': options.get('outline', 0),
         'Shadow': options.get('shadow', 0),
         'Alignment': options.get('alignment', 2),
         'MarginL': options.get('margin_l', 10),
         'MarginR': options.get('margin_r', 10),
         'MarginV': options.get('margin_v', 10),
-        'Encoding': options.get('encoding', 1)
+        'Encoding': options.get('encoding', 1),
+        'FontWeight': options.get('font_weight', 400)  # Default weight is 400 (normal)
     }
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
@@ -258,7 +259,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 'Encoding': options.get('encoding', 1),
                 'Spacing': options.get('spacing', 0),
                 'Angle': options.get('angle', 0),
-                'UpperCase': options.get('uppercase', 0)
+                'UpperCase': options.get('uppercase', 0),
+                'FontWeight': options.get('font_weight', 400)
             }
 
             # Add only populated options to the subtitle filter
@@ -303,4 +305,3 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def convert_array_to_collection(options):
     logger.info(f"Converting options array to dictionary: {options}")
     return {item["option"]: item["value"] for item in options if isinstance(item, dict) and "option" in item and "value" in item}
-

@@ -220,18 +220,39 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
+            ass_content = generate_ass_subtitle(result, max_chars)
+            logger.info(f"Generated ASS content length: {len(ass_content)}")
             
+            if not ass_content:
+                logger.error("Generated ASS content is empty")
+                raise ValueError("Empty ASS content generated")
+
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
             with open(temp_ass_filename, 'w', encoding='utf-8') as f:
                 f.write(ass_content)
             
-            # Upload the ASS file to GCS and get the URL
-            ass_gcs_url = upload_to_gcs(temp_ass_filename)
+            # Verify the file was written correctly
+            if os.path.getsize(temp_ass_filename) == 0:
+                logger.error(f"Failed to write ASS content to {temp_ass_filename}")
+                raise IOError(f"Failed to write ASS content to {temp_ass_filename}")
+            else:
+                logger.info(f"ASS content written to {temp_ass_filename}, size: {os.path.getsize(temp_ass_filename)} bytes")
             
-            # Remove the temporary ASS file
-            os.remove(temp_ass_filename)
+            # Upload the ASS file to GCS and get the URL
+            try:
+                ass_gcs_url = upload_to_gcs(temp_ass_filename)
+                logger.info(f"Uploaded ASS file to GCS: {ass_gcs_url}")
+            except Exception as e:
+                logger.error(f"Failed to upload ASS file to GCS: {str(e)}")
+                raise
+            
+            # Remove the temporary ASS file only if upload was successful
+            if ass_gcs_url:
+                os.remove(temp_ass_filename)
+                logger.info(f"Removed temporary ASS file: {temp_ass_filename}")
+            else:
+                logger.warning(f"Keeping temporary ASS file due to upload failure: {temp_ass_filename}")
 
             output = {
                 'transcript': "\n".join(transcript),
@@ -240,7 +261,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 'duration_sentences': duration_sentences,
                 'duration_splitsentence': duration_splitsentence,
                 'srt_format': srt_format,
-                'ass_file_url': ass_gcs_url  # Add the ASS file URL to the output
+                'ass_file_url': ass_gcs_url
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output
@@ -330,3 +351,4 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
+
