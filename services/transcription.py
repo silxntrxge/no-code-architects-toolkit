@@ -11,7 +11,6 @@ import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 import uuid
 import tempfile
-
 # Set up logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -247,7 +246,6 @@ def create_word_level_srt(segments, words_per_subtitle):
         srt_content.append(f"{i}\n{start} --> {end}\n{entry['text']}")
     
     return "\n\n".join(srt_content)
-
 def process_transcription(audio_path, output_type, words_per_subtitle=None, max_chars=56, language=None):
     """Transcribe audio and return the transcript or subtitle content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
@@ -363,3 +361,4 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
         if os.path.exists(audio_path):
             os.remove(audio_path)
             logger.info(f"Removed temporary file: {audio_path}")
+

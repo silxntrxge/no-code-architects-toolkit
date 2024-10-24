@@ -40,7 +40,7 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        transcription = perform_transcription(audio_file, words_per_subtitle, output_type)
+        transcription = process_transcription(audio_file, output_type, words_per_subtitle=words_per_subtitle)
 
         if output_type in ['srt', 'vtt', 'ass']:
             # For file outputs, upload to GCS and return the URL
@@ -54,12 +54,10 @@ def transcribe(job_id, data):
                 "durations": transcription['duration_sentences'],
                 "split_sentence_durations": transcription['duration_splitsentence'],
                 "srt_format": transcription['srt_format'],
-                "ass_file_url": transcription['ass_file_url'],
-                "ass_content": transcription['ass_content'],
                 "job_id": id
             }
         else:
-            # For transcript output, return all the details
+            # For transcript output, return all the details without the file URL
             result = {
                 "message": "Transcription completed",
                 "timestamps": transcription['timestamps'],
@@ -67,8 +65,6 @@ def transcribe(job_id, data):
                 "durations": transcription['duration_sentences'],
                 "split_sentence_durations": transcription['duration_splitsentence'],
                 "srt_format": transcription['srt_format'],
-                "ass_file_url": transcription['ass_file_url'],
-                "ass_content": transcription['ass_content'],
                 "job_id": id
             }
 
