@@ -60,7 +60,7 @@ def transcribe(job_id, data):
                 "durations": transcription['duration_sentences'],
                 "split_sentence_durations": transcription['duration_splitsentence'],
                 "srt_format": transcription['srt_format'],
-                "ass_file_url": transcription['ass_file_url'],
+                "ass_file_url": gcs_url,
                 "job_id": id
             }
 
