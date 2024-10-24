@@ -40,28 +40,33 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        result = perform_transcription(audio_file, words_per_subtitle, output_type)
+        transcription = perform_transcription(audio_file, words_per_subtitle, output_type)
 
-        # Always return the full result
-        response = {
-            'transcript': result['transcript'],
-            'timestamps': result['timestamps'],
-            'text_segments': result['text_segments'],
-            'duration_sentences': result['duration_sentences'],
-            'duration_splitsentence': result['duration_splitsentence'],
-            'srt_format': result['srt_format'],
-            'ass_file_url': result['gcs_url']
-        }
-
-        # Add specific output URLs if they exist
-        if 'srt_file_url' in result:
-            response['srt_file_url'] = result['srt_file_url']
-        if 'vtt_file_url' in result:
-            response['vtt_file_url'] = result['vtt_file_url']
+        if output_type in ['srt', 'vtt', 'ass']:
+            # For file outputs, upload to GCS and return the URL
+            gcs_url = upload_to_gcs(transcription[f'{output_type}_file'])
+            os.remove(transcription[f'{output_type}_file'])  # Remove the temporary file after uploading
+            result = {
+                "message": f"Transcription completed. {output_type.upper()} file uploaded.",
+                f"{output_type}_file_url": gcs_url,
+                "job_id": id
+            }
+        else:
+            # For transcript output, return all the details
+            result = {
+                "message": "Transcription completed",
+                "timestamps": transcription['timestamps'],
+                "transcription": transcription['text_segments'],
+                "durations": transcription['duration_sentences'],
+                "split_sentence_durations": transcription['duration_splitsentence'],
+                "srt_format": transcription['srt_format'],
+                "ass_file_url": transcription['ass_file_url'],
+                "job_id": id
+            }
 
         if webhook_url:
             try:
-                webhook_response = requests.post(webhook_url, json=response)
+                webhook_response = requests.post(webhook_url, json=result)
                 if webhook_response.status_code == 200:
                     logger.info(f"Job {id}: Successfully sent transcription to webhook: {webhook_url}")
                     return jsonify({"message": "Transcription completed and sent to webhook"}), 200
@@ -72,7 +77,7 @@ def transcribe(job_id, data):
                 logger.error(f"Job {id}: Error sending transcription to webhook: {str(webhook_error)}")
                 return jsonify({"error": "Error sending transcription to webhook"}), 500
         else:
-            return jsonify(response), 200
+            return jsonify(result), 200
 
     except Exception as e:
         error_message = f"Job {id}: Transcription error - {str(e)}"
