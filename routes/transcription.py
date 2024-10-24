@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.transcription import perform_transcription
+from services.transcription import perform_transcription, process_transcription  # Ensure correct import
 from app_utils import validate_payload, queue_task_wrapper
 from services.authentication import authenticate
 from services.gcp_toolkit import upload_to_gcs
