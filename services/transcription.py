@@ -113,7 +113,7 @@ def create_word_level_srt(segments, words_per_subtitle):
 def generate_ass_subtitle(result, max_chars):
     """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
     logger.info("Generate ASS subtitle content with highlighted current words")
-    
+    # ASS file header
     ass_content = ""
 
     def format_time(t):
@@ -121,15 +121,17 @@ def generate_ass_subtitle(result, max_chars):
         minutes = int((t % 3600) // 60)
         seconds = int(t % 60)
         centiseconds = int(round((t - int(t)) * 100))
-        return f"{hours:01d}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+        return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
     max_chars_per_line = max_chars  # Maximum characters per line
 
+    # Process each segment
     for segment in result['segments']:
         words = segment.get('words', [])
         if not words:
             continue  # Skip if no word-level timestamps
 
+        # Group words into lines
         lines = []
         current_line = []
         current_line_length = 0
@@ -145,23 +147,39 @@ def generate_ass_subtitle(result, max_chars):
         if current_line:
             lines.append(current_line)
 
+        # Generate events for each line
         for line in lines:
+            line_start_time = line[0]['start']
+            line_end_time = line[-1]['end']
+
+            # Generate events for highlighting each word
             for i, word_info in enumerate(line):
                 start_time = word_info['start']
-                end_time = word_info['end'] if i + 1 == len(line) else line[i + 1]['start']
+                end_time = word_info['end']
+                current_word = word_info['word']
 
+                # Build the line text with highlighted current word
                 caption_parts = []
                 for w in line:
-                    word_text = w['word'].strip()
+                    word_text = w['word']
                     if w == word_info:
-                        caption_parts.append(r'{\c&H00FFFF&}' + word_text + r'{\c&HFFFFFF&}')
+                        # Highlight current word
+                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
                     else:
-                        caption_parts.append(word_text)
+                        # Default color
+                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
                 caption_with_highlight = ' '.join(caption_parts)
 
+                # Format times
                 start = format_time(start_time)
+                # End the dialogue event when the next word starts or at the end of the line
+                if i + 1 < len(line):
+                    end_time = line[i + 1]['start']
+                else:
+                    end_time = line_end_time
                 end = format_time(end_time)
 
+                # Add the dialogue line
                 ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
 
     return ass_content
@@ -220,7 +238,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result, max_chars)
+            ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
             
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
@@ -240,7 +258,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 'duration_sentences': duration_sentences,
                 'duration_splitsentence': duration_splitsentence,
                 'srt_format': srt_format,
-                'ass_file_url': ass_gcs_url
+                'ass_file_url': ass_gcs_url  # Add the ASS file URL to the output
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output
@@ -268,10 +286,6 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 
                 with open(output_filename, 'w', encoding='utf-8') as f:
                     f.write(ass_content)
-                
-                # Verify the file size after writing
-                file_size = os.path.getsize(output_filename)
-                logger.info(f"ASS file size after writing: {file_size} bytes")
             
             logger.info(f"Generated {output_type.upper()} output: {output_filename}")
             return output_filename
@@ -295,6 +309,7 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             logger.info(f"Downloading file from URL: {audio_file}")
             response = requests.get(audio_file)
             if response.status_code == 200:
+                # Use tempfile to create a temporary file
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
                 temp_file.write(response.content)
                 temp_file.close()
@@ -303,58 +318,26 @@ def perform_transcription(audio_file, words_per_subtitle=None, output_type='tran
             else:
                 raise Exception(f"Failed to download file. Status code: {response.status_code}")
 
+        # Check if the file exists
         if not os.path.exists(audio_file):
             raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
         # Perform transcription
-        transcription_result = process_transcription(audio_file, 'transcript', words_per_subtitle)
+        transcription_result = process_transcription(audio_file, output_type, words_per_subtitle)
         
-        # Generate ASS file
-        model = whisper.load_model("base")
-        result = model.transcribe(audio_file, word_timestamps=True)
-        ass_content = generate_ass_subtitle(result, 56)  # Using default max_chars of 56
-        
-        # Write ASS content to a temporary file
-        temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
-        with open(temp_ass_filename, 'w', encoding='utf-8') as f:
-            f.write(ass_content)
-        
-        # Upload ASS file to GCS
-        ass_gcs_url = upload_to_gcs(temp_ass_filename)
-        
-        # Remove the temporary ASS file
-        os.remove(temp_ass_filename)
-
-        # Prepare the result
-        result = {
-            'transcript': transcription_result['transcript'],
-            'timestamps': transcription_result['timestamps'],
-            'text_segments': transcription_result['text_segments'],
-            'duration_sentences': transcription_result['duration_sentences'],
-            'duration_splitsentence': transcription_result['duration_splitsentence'],
-            'srt_format': transcription_result['srt_format'],
-            'ass_file_url': ass_gcs_url
-        }
-
-        # Generate additional output if requested
-        if output_type in ['srt', 'vtt']:
-            output_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.{output_type}")
-            if output_type == 'srt':
-                writer = WriteSRT(output_dir=STORAGE_PATH)
-            else:  # vtt
-                writer = WriteVTT(output_dir=STORAGE_PATH)
-            temp_filename = writer(transcription_result, audio_file)
-            os.rename(temp_filename, output_filename)
-            gcs_url = upload_to_gcs(output_filename)
-            result[f'{output_type}_file_url'] = gcs_url
-            os.remove(output_filename)
-
-        return result
+        # If the result is a file path (for srt, vtt, ass), upload it to GCS
+        if output_type in ['srt', 'vtt', 'ass']:
+            gcs_url = upload_to_gcs(transcription_result)
+            logger.info(f"Uploaded {output_type} file to GCS: {gcs_url}")
+            return {f'{output_type}_file_url': gcs_url}
+        else:
+            return transcription_result
 
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         raise
     finally:
+        # Clean up temporary file if it was created
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
             logger.info(f"Temporary file removed: {temp_file.name}")
