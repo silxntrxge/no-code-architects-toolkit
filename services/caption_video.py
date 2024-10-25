@@ -72,10 +72,7 @@ logger.info(f"Detected fonts: {', '.join(FONT_PATHS.keys())}")
 def generate_style_line(options):
     """Generate ASS style line from options."""
     # Convert font_weight to ASS compatible format
-    # ASS uses 0 for regular (400) and -1 for bold (700)
-    font_weight = options.get('font_weight', 400)
-    # If weight >= 700, set bold to -1, otherwise 0
-    weight_value = -1 if int(font_weight) >= 700 else 0
+    font_weight = int(options.get('font_weight', 400))
     
     style_options = {
         'Name': 'Default',
@@ -84,7 +81,7 @@ def generate_style_line(options):
         'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
         'OutlineColour': options.get('outline_color', '&H00000000'),
         'BackColour': options.get('back_color', '&H00000000'),
-        'Bold': weight_value,  # Use weight_value instead of direct bold option
+        'Bold': -1 if font_weight >= 700 else 0,  # Bold is -1 when enabled, 0 when disabled
         'Italic': options.get('italic', 0),
         'Underline': options.get('underline', 0),
         'StrikeOut': options.get('strikeout', 0),
@@ -99,9 +96,37 @@ def generate_style_line(options):
         'MarginL': options.get('margin_l', 10),
         'MarginR': options.get('margin_r', 10),
         'MarginV': options.get('margin_v', 10),
-        'Encoding': options.get('encoding', 1)
+        'Encoding': options.get('encoding', 1),
+        'FontWeight': font_weight  # Add explicit font weight
     }
-    return f"Style: {','.join(str(v) for v in style_options.values())}"
+    
+    # Create the style string with all values
+    style_values = [
+        style_options['Name'],
+        style_options['Fontname'],
+        style_options['Fontsize'],
+        style_options['PrimaryColour'],
+        style_options['OutlineColour'],
+        style_options['BackColour'],
+        style_options['Bold'],
+        style_options['Italic'],
+        style_options['Underline'],
+        style_options['StrikeOut'],
+        style_options['ScaleX'],
+        style_options['ScaleY'],
+        style_options['Spacing'],
+        style_options['Angle'],
+        style_options['BorderStyle'],
+        style_options['Outline'],
+        style_options['Shadow'],
+        style_options['Alignment'],
+        style_options['MarginL'],
+        style_options['MarginR'],
+        style_options['MarginV'],
+        style_options['Encoding'],
+        style_options['FontWeight']  # Add FontWeight to the style string
+    ]
+    return f"Style: {','.join(str(v) for v in style_values)}"
 
 def download_and_verify_font(font_url, job_id):
     """Download font file, verify its format, and store it in the custom fonts directory."""
@@ -316,4 +341,5 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def convert_array_to_collection(options):
     logger.info(f"Converting options array to dictionary: {options}")
     return {item["option"]: item["value"] for item in options if isinstance(item, dict) and "option" in item and "value" in item}
+
 
