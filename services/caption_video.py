@@ -71,6 +71,12 @@ logger.info(f"Detected fonts: {', '.join(FONT_PATHS.keys())}")
 
 def generate_style_line(options):
     """Generate ASS style line from options."""
+    # Convert font_weight to ASS compatible format
+    # ASS uses 0 for regular (400) and -1 for bold (700)
+    font_weight = options.get('font_weight', 400)
+    # If weight >= 700, set bold to -1, otherwise 0
+    weight_value = -1 if int(font_weight) >= 700 else 0
+    
     style_options = {
         'Name': 'Default',
         'Fontname': options.get('font_name', 'Arial'),
@@ -78,7 +84,7 @@ def generate_style_line(options):
         'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
         'OutlineColour': options.get('outline_color', '&H00000000'),
         'BackColour': options.get('back_color', '&H00000000'),
-        'Bold': options.get('bold', 0),
+        'Bold': weight_value,  # Use weight_value instead of direct bold option
         'Italic': options.get('italic', 0),
         'Underline': options.get('underline', 0),
         'StrikeOut': options.get('strikeout', 0),
@@ -93,8 +99,7 @@ def generate_style_line(options):
         'MarginL': options.get('margin_l', 10),
         'MarginR': options.get('margin_r', 10),
         'MarginV': options.get('margin_v', 10),
-        'Encoding': options.get('encoding', 1),
-        'FontWeight': options.get('font_weight', 400)  # Default weight is 400 (normal)
+        'Encoding': options.get('encoding', 1)
     }
     return f"Style: {','.join(str(v) for v in style_options.values())}"
 
@@ -238,16 +243,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             subtitle_filter = f"subtitles='{srt_path}'"
             logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
         else:
+            # Get font weight and ensure it's within valid range (100-900)
+            font_weight = max(100, min(900, int(options.get('font_weight', 400))))
+            
             # Construct FFmpeg filter options for subtitles with detailed styling
             subtitle_filter = f"subtitles={srt_path}:fontsdir='{os.path.dirname(font_path)}':force_style='"
             style_options = {
-                'FontName': os.path.basename(font_path),  # Use the exact font file name
+                'FontName': os.path.basename(font_path),
                 'FontSize': options.get('font_size', 24),
                 'PrimaryColour': options.get('primary_color', '&H00FFFFFF'),
                 'SecondaryColour': options.get('secondary_color', '&H00000000'),
                 'OutlineColour': options.get('outline_color', '&H00000000'),
                 'BackColour': options.get('back_color', '&H00000000'),
-                'Bold': options.get('bold', 0),
+                'Bold': 1 if font_weight >= 700 else 0,  # Set Bold based on font_weight
                 'Italic': options.get('italic', 0),
                 'Underline': options.get('underline', 0),
                 'StrikeOut': options.get('strikeout', 0),
@@ -263,7 +271,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 'Spacing': options.get('spacing', 0),
                 'Angle': options.get('angle', 0),
                 'UpperCase': options.get('uppercase', 0),
-                'FontWeight': options.get('font_weight', 400)
+                'FontWeight': font_weight  # Add explicit font weight
             }
 
             # Add only populated options to the subtitle filter
@@ -308,3 +316,4 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def convert_array_to_collection(options):
     logger.info(f"Converting options array to dictionary: {options}")
     return {item["option"]: item["value"] for item in options if isinstance(item, dict) and "option" in item and "value" in item}
+
