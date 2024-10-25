@@ -42,19 +42,24 @@ def transcribe(job_id, data):
 
         transcription = process_transcription(audio_file, output_type, words_per_subtitle=words_per_subtitle)
 
-        # Directly handle the transcription result as a dictionary
-        gcs_url = upload_to_gcs(transcription[f'{output_type}_file'])
-        os.remove(transcription[f'{output_type}_file'])  # Remove the temporary file after uploading
-        result = {
-            "message": f"Transcription completed. {output_type.upper()} file uploaded.",
-            f"{output_type}_file_url": gcs_url,
-            "timestamps": transcription['timestamps'],
-            "transcription": transcription['text_segments'],
-            "durations": transcription['duration_sentences'],
-            "split_sentence_durations": transcription['duration_splitsentence'],
-            "srt_format": transcription['srt_format'],
-            "job_id": id
-        }
+        if output_type in ['srt', 'vtt', 'ass']:
+            # Handle the case where transcription is a file path
+            gcs_url = upload_to_gcs(transcription)
+            os.remove(transcription)  # Remove the temporary file after uploading
+            
+            # Get additional transcription details
+            transcript_details = process_transcription(audio_file, 'transcript', words_per_subtitle=words_per_subtitle)
+            
+            result = {
+                "message": f"Transcription {output_type.upper()} completed.",
+                f"{output_type}_file_url": gcs_url,
+                "timestamps": transcript_details['timestamps'],
+                "transcription": transcript_details['text_segments'],
+                "durations": transcript_details['duration_sentences'],
+                "split_sentence_durations": transcript_details['duration_splitsentence'],
+                "srt_format": transcript_details['srt_format'],
+                "job_id": id
+            }
 
         if webhook_url:
             try:
