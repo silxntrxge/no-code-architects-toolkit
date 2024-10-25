@@ -232,7 +232,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # For ASS subtitles, we should avoid overriding styles
         if subtitle_extension == '.ass':
             # Use the subtitles filter with explicit font file
-            subtitle_filter = f"subtitles='{srt_path}':fontsdir='{os.path.dirname(font_path)}':force_style='FontName={os.path.basename(font_path)}'"
+            subtitle_filter = f"subtitles='{srt_path}'"
             logger.info(f"Job {job_id}: Using ASS subtitle filter with fontfile: {subtitle_filter}")
         else:
             # Construct FFmpeg filter options for subtitles with detailed styling
