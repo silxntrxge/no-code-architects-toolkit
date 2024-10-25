@@ -9,6 +9,9 @@ import mimetypes
 import re
 from urllib.parse import urlparse, parse_qs
 import hashlib
+#1.0.0, 1.0.1 works perfectly
+
+
 
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
