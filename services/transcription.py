@@ -87,13 +87,32 @@ def process_transcription(media_url, output_type, max_chars=56, language=None):
         logger.error(f"Transcription failed: {str(e)}")
         raise
 
-def generate_ass_subtitle(result, max_chars):
+def create_word_limited_captions(words, words_per_line):
+    """Create word-limited captions while preserving moving highlight functionality."""
+    caption_groups = []
+    
+    # Group words into chunks of specified size
+    for i in range(0, len(words), words_per_line):
+        chunk = words[i:i + words_per_line]
+        
+        # Get timing for the chunk
+        start_time = chunk[0]['start']
+        end_time = chunk[-1]['end']
+        
+        # Store the chunk info
+        caption_groups.append({
+            'words': chunk,
+            'start': start_time,
+            'end': end_time
+        })
+    
+    return caption_groups
+
+def generate_ass_subtitle(result, max_chars, words_per_line=None):
     """Generate ASS subtitle content with highlighted current words, showing one line at a time."""
     logger.info("Generate ASS subtitle content with highlighted current words")
-    # ASS file header
     ass_content = ""
 
-    # Helper function to format time
     def format_time(t):
         hours = int(t // 3600)
         minutes = int((t % 3600) // 60)
@@ -101,64 +120,89 @@ def generate_ass_subtitle(result, max_chars):
         centiseconds = int(round((t - int(t)) * 100))
         return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
-    max_chars_per_line = max_chars  # Maximum characters per line
-
-    # Process each segment
     for segment in result['segments']:
         words = segment.get('words', [])
         if not words:
-            continue  # Skip if no word-level timestamps
+            continue
 
-        # Group words into lines
-        lines = []
-        current_line = []
-        current_line_length = 0
-        for word_info in words:
-            word_length = len(word_info['word']) + 1  # +1 for space
-            if current_line_length + word_length > max_chars_per_line:
-                lines.append(current_line)
-                current_line = [word_info]
-                current_line_length = word_length
-            else:
-                current_line.append(word_info)
-                current_line_length += word_length
-        if current_line:
-            lines.append(current_line)
-
-        # Generate events for each line
-        for line in lines:
-            line_start_time = line[0]['start']
-            line_end_time = line[-1]['end']
-
-            # Generate events for highlighting each word
-            for i, word_info in enumerate(line):
-                start_time = word_info['start']
-                end_time = word_info['end']
-                current_word = word_info['word']
-
-                # Build the line text with highlighted current word
-                caption_parts = []
-                for w in line:
-                    word_text = w['word']
-                    if w == word_info:
-                        # Highlight current word
-                        caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+        if words_per_line:
+            # Get word-limited groups
+            caption_groups = create_word_limited_captions(words, words_per_line)
+            
+            # Process each group
+            for group in caption_groups:
+                group_words = group['words']
+                
+                # Generate moving highlight for each word in the group
+                for i, word_info in enumerate(group_words):
+                    start_time = word_info['start']
+                    
+                    # Calculate end time
+                    if i + 1 < len(group_words):
+                        end_time = group_words[i + 1]['start']
                     else:
-                        # Default color
-                        caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
-                caption_with_highlight = ' '.join(caption_parts)
-
-                # Format times
-                start = format_time(start_time)
-                # End the dialogue event when the next word starts or at the end of the line
-                if i + 1 < len(line):
-                    end_time = line[i + 1]['start']
+                        end_time = group['end']
+                    
+                    # Build caption with moving highlight
+                    caption_parts = []
+                    for w in group_words:
+                        word_text = w['word']
+                        if w == word_info:
+                            caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+                        else:
+                            caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
+                    
+                    caption_with_highlight = ' '.join(caption_parts)
+                    
+                    # Format times
+                    start = format_time(start_time)
+                    end = format_time(end_time)
+                    
+                    # Add the dialogue line
+                    ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
+        else:
+            # Original logic remains unchanged
+            lines = []
+            current_line = []
+            current_line_length = 0
+            for word_info in words:
+                word_length = len(word_info['word']) + 1
+                if current_line_length + word_length > max_chars:
+                    lines.append(current_line)
+                    current_line = [word_info]
+                    current_line_length = word_length
                 else:
-                    end_time = line_end_time
-                end = format_time(end_time)
+                    current_line.append(word_info)
+                    current_line_length += word_length
+            if current_line:
+                lines.append(current_line)
 
-                # Add the dialogue line
-                ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
+            for line in lines:
+                line_start_time = line[0]['start']
+                line_end_time = line[-1]['end']
+
+                for i, word_info in enumerate(line):
+                    start_time = word_info['start']
+                    end_time = word_info['end']
+
+                    caption_parts = []
+                    for w in line:
+                        word_text = w['word']
+                        if w == word_info:
+                            caption_parts.append(r'{\c&H00FFFF&}' + word_text)
+                        else:
+                            caption_parts.append(r'{\c&HFFFFFF&}' + word_text)
+                    caption_with_highlight = ' '.join(caption_parts)
+
+                    start = format_time(start_time)
+                    if i + 1 < len(line):
+                        end_time = line[i + 1]['start']
+                    else:
+                        end_time = line_end_time
+                    end = format_time(end_time)
+
+                    ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
+
     return ass_content
 
 def format_timestamp(seconds):
@@ -344,7 +388,8 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                     verbose=False
                 )
                 logger.info("Transcription completed with word-level timestamps")
-                ass_content = generate_ass_subtitle(result, max_chars)
+                # Pass words_per_subtitle to generate_ass_subtitle
+                ass_content = generate_ass_subtitle(result, max_chars, words_per_subtitle)
                 logger.info("Generated ASS subtitle content")
                 
                 with open(output_filename, 'w', encoding='utf-8') as f:
