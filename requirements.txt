@@ -18,3 +18,4 @@ Pillow
 flask-cors
 jsonschema
 nltk
+boto3>=1.26.0
