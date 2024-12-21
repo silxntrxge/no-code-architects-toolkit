@@ -240,7 +240,7 @@ def split_sentence(sentence, start_time, end_time):
     duration1 = round(total_duration * ratio, 2)
     duration2 = round(total_duration - duration1, 2)
 
-    return part1, part2, duration1, duration2
+    return part1, part2, duration1, duration2, [part1, part2]
 
 def create_word_level_srt(segments, words_per_subtitle):
     """Create SRT content with a specified number of words per subtitle."""
@@ -291,6 +291,7 @@ def create_word_level_srt(segments, words_per_subtitle):
         srt_content.append(f"{i}\n{start} --> {end}\n{entry['text']}")
     
     return "\n\n".join(srt_content)
+
 def process_transcription(audio_path, output_type, words_per_subtitle=None, max_chars=56, language=None):
     """Transcribe audio and return the transcript or subtitle content."""
     logger.info(f"Starting transcription for: {audio_path} with output type: {output_type}")
@@ -308,7 +309,8 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
             text_segments = []
             duration_sentences = []
             duration_splitsentence = []
-            srt_format = []  # New list for SRT format
+            split_sentences = []  # New list for split sentences
+            srt_format = []  # List for SRT format
             for i, segment in enumerate(result['segments'], start=1):
                 start_time = segment['start']
                 end_time = segment['end']
@@ -327,8 +329,9 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                     duration_sentences.append(str(round(duration, 2)))
                     
                     # Split sentence analysis
-                    part1, part2, duration1, duration2 = split_sentence(sentence, start_time, end_time)
+                    part1, part2, duration1, duration2, split_parts = split_sentence(sentence, start_time, end_time)
                     duration_splitsentence.extend([str(duration1), str(duration2)])
+                    split_sentences.extend(split_parts)  # Add the split parts
                     
                     # Create SRT format entry
                     srt_entry = f"{i}\n{formatted_start.replace('.', ',')} --> {formatted_end.replace('.', ',')}\n{sentence}"
@@ -344,7 +347,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 srt_format = "\n\n".join(srt_format)
 
             # Generate ASS subtitle content
-            ass_content = generate_ass_subtitle(result, max_chars)  # Remove words_per_subtitle from here
+            ass_content = generate_ass_subtitle(result, max_chars)
             
             # Write the ASS content to a temporary file
             temp_ass_filename = os.path.join(STORAGE_PATH, f"{uuid.uuid4()}.ass")
@@ -363,9 +366,10 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 'text_segments': text_segments,
                 'duration_sentences': duration_sentences,
                 'duration_splitsentence': duration_splitsentence,
+                'split_sentences': split_sentences,  # Add split sentences to output
                 'srt_format': srt_format,
-                'ass_content': ass_content,  # Include ass_content in the output
-                'ass_file_url': ass_gcs_url  # Add the ASS file URL to the output
+                'ass_content': ass_content,
+                'ass_file_url': ass_gcs_url
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output

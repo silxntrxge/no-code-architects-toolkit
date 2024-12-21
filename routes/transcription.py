@@ -57,6 +57,7 @@ def transcribe(job_id, data):
                 "transcription": transcript_details['text_segments'],
                 "durations": transcript_details['duration_sentences'],
                 "split_sentence_durations": transcript_details['duration_splitsentence'],
+                "split_sentences": transcript_details['split_sentences'],
                 "srt_format": transcript_details['srt_format'],
                 "job_id": id
             }
