@@ -407,4 +407,3 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
         if os.path.exists(audio_path):
             os.remove(audio_path)
             logger.info(f"Removed temporary file: {audio_path}")
-

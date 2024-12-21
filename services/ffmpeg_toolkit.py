@@ -86,4 +86,3 @@ def process_video_combination(media_urls, job_id, webhook_url=None):
     except Exception as e:
         print(f"Video combination failed: {str(e)}")
         raise
-

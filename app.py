@@ -6,15 +6,11 @@ from routes.combine_videos import combine_bp
 from routes.audio_mixing import audio_mixing_bp
 from routes.gdrive_upload import gdrive_upload_bp
 from routes.caption_video import caption_bp
-from services.gcp_toolkit import init_storage_client
 import logging
 import traceback
 
 app = Flask(__name__)
 CORS(app)
-
-# Initialize storage clients
-init_storage_client()
 
 # Register blueprints
 app.register_blueprint(convert_bp)
