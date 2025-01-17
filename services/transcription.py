@@ -204,7 +204,6 @@ def generate_ass_subtitle(result, max_chars, words_per_line=None):
                     ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{caption_with_highlight}\n"
 
     return ass_content
-
 def format_timestamp(seconds):
     """Convert seconds to HH:MM:SS.mmm format."""
     td = timedelta(seconds=seconds)
@@ -355,7 +354,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 f.write(ass_content)
             
             # Upload the ASS file to GCS and get the URL
-            ass_gcs_url = upload_to_gcs(temp_ass_filename)
+            ass_cloud_url = upload_to_gcs(temp_ass_filename)
             
             # Remove the temporary ASS file
             os.remove(temp_ass_filename)
@@ -369,7 +368,7 @@ def process_transcription(audio_path, output_type, words_per_subtitle=None, max_
                 'split_sentences': split_sentences,  # Add split sentences to output
                 'srt_format': srt_format,
                 'ass_content': ass_content,
-                'ass_file_url': ass_gcs_url
+                'ass_file_url': ass_cloud_url
             }
             logger.info("Transcript with timestamps, sentence durations, split sentence durations, SRT format, and ASS file URL generated")
             return output

@@ -1,14 +1,14 @@
-from flask import Blueprint, jsonify
-from app_utils import validate_payload, queue_task_wrapper
+from flask import Blueprint
+from app_utils import *
 import logging
-from services.ffmpeg_toolkit import process_video_combination
+from services.v1.video.concatenate import process_video_concatenate
 from services.authentication import authenticate
-import requests
+from services.cloud_storage import upload_file
 
-combine_bp = Blueprint('combine', __name__)
+v1_video_concatenate_bp = Blueprint('v1_video_concatenate', __name__)
 logger = logging.getLogger(__name__)
 
-@combine_bp.route('/combine-videos', methods=['POST'])
+@v1_video_concatenate_bp.route('/v1/video/concatenate', methods=['POST'])
 @authenticate
 @validate_payload({
     "type": "object",
@@ -32,27 +32,21 @@ logger = logging.getLogger(__name__)
 })
 @queue_task_wrapper(bypass_queue=False)
 def combine_videos(job_id, data):
-    media_urls = [item['video_url'] for item in data['video_urls']]
+    media_urls = data['video_urls']
     webhook_url = data.get('webhook_url')
     id = data.get('id')
 
     logger.info(f"Job {job_id}: Received combine-videos request for {len(media_urls)} videos")
 
     try:
-        cloud_url = process_video_combination(media_urls, job_id)
+        output_file = process_video_concatenate(media_urls, job_id)
         logger.info(f"Job {job_id}: Video combination process completed successfully")
 
-        if webhook_url:
-            # Send the result to the webhook URL
-            webhook_response = requests.post(webhook_url, json={"cloud_url": cloud_url, "job_id": job_id})
+        cloud_url = upload_file(output_file)
+        logger.info(f"Job {job_id}: Combined video uploaded to cloud storage: {cloud_url}")
 
-            if webhook_response.status_code == 200:
-                logger.info(f"Job {job_id}: Successfully sent result to webhook: {webhook_url}")
-            else:
-                logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
-
-        return jsonify({"cloud_url": cloud_url}), 200
+        return cloud_url, "/v1/video/concatenate", 200
 
     except Exception as e:
         logger.error(f"Job {job_id}: Error during video combination process - {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return str(e), "/v1/video/concatenate", 500

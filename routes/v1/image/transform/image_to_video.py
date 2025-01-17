@@ -1,14 +1,14 @@
 from flask import Blueprint
 from app_utils import *
 import logging
-from services.image_to_video import process_image_to_video
+from services.v1.image.transform.image_to_video import process_image_to_video
 from services.authentication import authenticate
 from services.cloud_storage import upload_file
 
-image_to_video_bp = Blueprint('image_to_video', __name__)
+v1_image_transform_video_bp = Blueprint('v1_image_transform_video', __name__)
 logger = logging.getLogger(__name__)
 
-@image_to_video_bp.route('/image-to-video', methods=['POST'])
+@v1_image_transform_video_bp.route('/v1/image/transform/video', methods=['POST'])
 @authenticate
 @validate_payload({
     "type": "object",
@@ -47,8 +47,8 @@ def image_to_video(job_id, data):
         logger.info(f"Job {job_id}: Converted video uploaded to cloud storage: {cloud_url}")
 
         # Return the cloud URL for the uploaded file
-        return cloud_url, "/image-to-video", 200
+        return cloud_url, "/v1/image/transform/video", 200
         
     except Exception as e:
         logger.error(f"Job {job_id}: Error processing image to video: {str(e)}", exc_info=True)
-        return str(e), "/image-to-video", 500
+        return str(e), "/v1/image/transform/video", 500

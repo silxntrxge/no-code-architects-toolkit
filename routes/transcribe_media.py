@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.transcription import process_transcription  # Ensure correct import
+from services.transcription import process_transcription
 from app_utils import validate_payload, queue_task_wrapper
 from services.authentication import authenticate
 from services.gcp_toolkit import upload_to_gcs
@@ -7,32 +7,32 @@ import requests
 import logging
 import os
 
-transcription_bp = Blueprint('transcription', __name__)
+transcribe_bp = Blueprint('transcribe', __name__)
 logger = logging.getLogger(__name__)
 
-@transcription_bp.route('/transcribe', methods=['POST'])
+@transcribe_bp.route('/transcribe-media', methods=['POST'])
 @authenticate
 @validate_payload({
     "type": "object",
     "properties": {
-        "audio_file": {"type": "string", "format": "uri"},
-        "webhook": {"type": "string", "format": "uri"},
+        "media_url": {"type": "string", "format": "uri"},
+        "webhook_url": {"type": "string", "format": "uri"},
         "id": {"type": "string"},
         "option": {"type": ["string", "integer"]},
         "output": {"type": "string", "enum": ["transcript", "srt", "vtt", "ass"]}
     },
-    "required": ["audio_file"],
+    "required": ["media_url"],
     "additionalProperties": False
 })
 @queue_task_wrapper(bypass_queue=False)
-def transcribe(job_id, data):
-    audio_file = data['audio_file']
-    webhook_url = data.get('webhook')
+def transcribe_media(job_id, data):
+    media_url = data['media_url']
+    webhook_url = data.get('webhook_url')
     id = data.get('id', job_id)
     words_per_subtitle = data.get('option')
-    output_type = data.get('output', 'transcript')
+    output = data.get('output', 'transcript')
 
-    logger.info(f"Job {id}: Received transcription request for {audio_file}")
+    logger.info(f"Job {id}: Received transcription request for {media_url}")
 
     try:
         if words_per_subtitle:
@@ -40,50 +40,67 @@ def transcribe(job_id, data):
         else:
             words_per_subtitle = None
 
-        transcription = process_transcription(audio_file, output_type, words_per_subtitle=words_per_subtitle)
+        # Get transcription result
+        transcription = process_transcription(media_url, output, words_per_subtitle=words_per_subtitle)
+        
+        # Initialize result dictionary
+        result = {
+            "job_id": id,
+            "message": f"Transcription {output.upper() if output != 'transcript' else ''} completed."
+        }
 
-        if output_type in ['srt', 'vtt', 'ass']:
-            # Handle the case where transcription is a file path
-            gcs_url = upload_to_gcs(transcription)
+        if output in ['srt', 'vtt', 'ass']:
+            # Handle subtitle file outputs
+            cloud_url = upload_to_gcs(transcription)
             os.remove(transcription)  # Remove the temporary file after uploading
             
             # Get additional transcription details
-            transcript_details = process_transcription(audio_file, 'transcript', words_per_subtitle=words_per_subtitle)
+            transcript_details = process_transcription(media_url, 'transcript', words_per_subtitle=words_per_subtitle)
             
-            result = {
-                "message": f"Transcription {output_type.upper()} completed.",
-                f"{output_type}_file_url": gcs_url,
+            # Add subtitle specific information
+            result.update({
+                f"{output}_file_url": cloud_url,
                 "timestamps": transcript_details['timestamps'],
                 "transcription": transcript_details['text_segments'],
                 "durations": transcript_details['duration_sentences'],
                 "split_sentence_durations": transcript_details['duration_splitsentence'],
                 "split_sentences": transcript_details['split_sentences'],
-                "srt_format": transcript_details['srt_format'],
-                "job_id": id
-            }
+                "srt_format": transcript_details['srt_format']
+            })
+        else:
+            # Handle transcript output
+            result.update({
+                "timestamps": transcription['timestamps'],
+                "transcription": transcription['text_segments'],
+                "durations": transcription['duration_sentences'],
+                "split_sentence_durations": transcription['duration_splitsentence'],
+                "split_sentences": transcription['split_sentences'],
+                "srt_format": transcription['srt_format']
+            })
+
+        logger.info(f"Job {id}: Successfully processed transcription")
 
         if webhook_url:
             try:
                 webhook_response = requests.post(webhook_url, json=result)
                 if webhook_response.status_code == 200:
                     logger.info(f"Job {id}: Successfully sent transcription to webhook: {webhook_url}")
-                    return jsonify({"message": "Transcription completed and sent to webhook"}), 200
+                    return "Transcription completed and sent to webhook", "/transcribe-media", 200
                 else:
                     logger.error(f"Job {id}: Failed to send transcription to webhook. Status code: {webhook_response.status_code}")
-                    return jsonify({"error": "Failed to send transcription to webhook"}), 500
+                    return "Failed to send transcription to webhook", "/transcribe-media", 500
             except Exception as webhook_error:
                 logger.error(f"Job {id}: Error sending transcription to webhook: {str(webhook_error)}")
-                return jsonify({"error": "Error sending transcription to webhook"}), 500
-        else:
-            return jsonify(result), 200
+                return "Error sending transcription to webhook", "/transcribe-media", 500
+        
+        return result, "/transcribe-media", 200
 
     except Exception as e:
-        # Print all relevant parameters in the error message
         error_details = {
             "error": str(e),
             "job_id": id,
-            "audio_file": audio_file,
-            "output_type": output_type,
+            "media_url": media_url,
+            "output": output,
             "webhook_url": webhook_url,
             "words_per_subtitle": words_per_subtitle
         }
@@ -94,4 +111,4 @@ def transcribe(job_id, data):
                 requests.post(webhook_url, json={"error": error_message, "job_id": id})
             except:
                 pass
-        return jsonify({"error": error_message}), 500
+        return error_message, "/transcribe-media", 500

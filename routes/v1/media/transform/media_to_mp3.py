@@ -2,15 +2,15 @@
 from flask import Blueprint, current_app
 from app_utils import *
 import logging
-from services.ffmpeg_toolkit import process_conversion
+from services.v1.media.transform.media_to_mp3 import process_media_to_mp3
 from services.authentication import authenticate
 from services.cloud_storage import upload_file
 import os
 
-convert_bp = Blueprint('convert', __name__)
+v1_media_transform_mp3_bp = Blueprint('v1_media_transform', __name__)
 logger = logging.getLogger(__name__)
 
-@convert_bp.route('/media-to-mp3', methods=['POST'])
+@v1_media_transform_mp3_bp.route('/v1/media/transform/mp3', methods=['POST'])
 @authenticate
 @validate_payload({
     "type": "object",
@@ -33,14 +33,14 @@ def convert_media_to_mp3(job_id, data):
     logger.info(f"Job {job_id}: Received media-to-mp3 request for media URL: {media_url}")
 
     try:
-        output_file = process_conversion(media_url, job_id, bitrate)
+        output_file = process_media_to_mp3(media_url, job_id, bitrate)
         logger.info(f"Job {job_id}: Media conversion process completed successfully")
 
         cloud_url = upload_file(output_file)
         logger.info(f"Job {job_id}: Converted media uploaded to cloud storage: {cloud_url}")
 
-        return cloud_url, "/media-to-mp3", 200
+        return cloud_url, "/v1/media/transform/mp3", 200
 
     except Exception as e:
         logger.error(f"Job {job_id}: Error during media conversion process - {str(e)}")
-        return str(e), "/media-to-mp3", 500
+        return str(e), "/v1/media/transform/mp3", 500

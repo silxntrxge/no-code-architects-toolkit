@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Define the path to the fonts directory
 FONTS_DIR = '/usr/share/fonts/custom'
+DYNAMIC_FONTS_DIR = '/usr/share/fonts/custom/dynamic'
 
 # Create the FONT_PATHS dictionary by reading the fonts directory
 FONT_PATHS = {}
@@ -29,6 +30,13 @@ for font_file in os.listdir(FONTS_DIR):
     if font_file.endswith(('.ttf', '.TTF', '.otf', '.OTF', '.woff', '.WOFF')):
         font_name = os.path.splitext(font_file)[0]
         FONT_PATHS[font_name] = os.path.join(FONTS_DIR, font_file)
+
+# Also scan dynamic directory if it exists
+if os.path.exists(DYNAMIC_FONTS_DIR):
+    for font_file in os.listdir(DYNAMIC_FONTS_DIR):
+        if font_file.endswith(('.ttf', '.TTF', '.otf', '.OTF', '.woff', '.WOFF')):
+            font_name = os.path.splitext(font_file)[0]
+            FONT_PATHS[font_name] = os.path.join(DYNAMIC_FONTS_DIR, font_file)
 
 # Create a list of acceptable font names
 ACCEPTABLE_FONTS = list(FONT_PATHS.keys())
@@ -86,8 +94,8 @@ def generate_style_line(options):
         'ScaleY': 100,
         'Spacing': 0,
         'Angle': 0,
-        'BorderStyle': 0,
-        'Outline': options.get('outline', 0),
+        'BorderStyle': 1,
+        'Outline': options.get('outline', 1),
         'Shadow': options.get('shadow', 0),
         'Alignment': options.get('alignment', 2),
         'MarginL': options.get('margin_l', 10),
@@ -106,10 +114,11 @@ def download_and_verify_font(font_url, job_id):
         # Generate a unique filename based on the URL
         url_hash = hashlib.md5(font_url.encode()).hexdigest()
         
-        # Check if a font with this hash already exists
-        existing_fonts = [f for f in os.listdir(FONTS_DIR) if f.startswith(url_hash)]
+        # Check if a font with this hash already exists in either directory
+        existing_fonts = ([f for f in os.listdir(DYNAMIC_FONTS_DIR) if f.startswith(url_hash)] if os.path.exists(DYNAMIC_FONTS_DIR) else []) + \
+                        [f for f in os.listdir(FONTS_DIR) if f.startswith(url_hash)]
         if existing_fonts:
-            font_path = os.path.join(FONTS_DIR, existing_fonts[0])
+            font_path = os.path.join(DYNAMIC_FONTS_DIR if os.path.exists(os.path.join(DYNAMIC_FONTS_DIR, existing_fonts[0])) else FONTS_DIR, existing_fonts[0])
             logger.info(f"Job {job_id}: Font already exists at {font_path}")
             return font_path
         
@@ -131,7 +140,10 @@ def download_and_verify_font(font_url, job_id):
         
         # Create the new filename
         new_filename = f"{url_hash}{ext}"
-        font_path = os.path.join(FONTS_DIR, new_filename)
+        font_path = os.path.join(DYNAMIC_FONTS_DIR, new_filename)
+        
+        # Ensure dynamic fonts directory exists
+        os.makedirs(DYNAMIC_FONTS_DIR, exist_ok=True)
         
         # Write the content to a file
         with open(font_path, 'wb') as f:

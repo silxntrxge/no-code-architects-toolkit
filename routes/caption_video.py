@@ -64,7 +64,7 @@ def caption_video(job_id, data):
 
         result = {
             "message": "Captioning completed",
-            "gcs_url": output_filename,  # This is the GCS URL returned by process_captioning
+            "cloud_url": output_filename,  # This is the GCS URL returned by process_captioning
             "job_id": id
         }
 
@@ -73,15 +73,15 @@ def caption_video(job_id, data):
                 webhook_response = requests.post(webhook_url, json=result)
                 if webhook_response.status_code == 200:
                     logger.info(f"Job {id}: Successfully sent result to webhook: {webhook_url}")
-                    return jsonify({"message": "Captioning completed and sent to webhook"}), 200
+                    return "Captioning completed and sent to webhook", "/caption-video", 200
                 else:
                     logger.error(f"Job {id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
-                    return jsonify({"error": "Failed to send result to webhook"}), 500          
+                    return "Failed to send result to webhook", "/caption-video", 500          
             except Exception as webhook_error:
                 logger.error(f"Job {id}: Error sending result to webhook: {str(webhook_error)}")
-                return jsonify({"error": "Error sending result to webhook"}), 500
-        else:
-            return jsonify(result), 200
+                return "Error sending result to webhook", "/caption-video", 500
+        
+        return result, "/caption-video", 200
         
     except Exception as e:
         error_message = f"Job {id}: Error during captioning process - {str(e)}"
@@ -91,4 +91,4 @@ def caption_video(job_id, data):
                 requests.post(webhook_url, json={"error": error_message, "job_id": id})
             except:
                 pass
-        return jsonify({"error": error_message}), 500
+        return error_message, "/caption-video", 500

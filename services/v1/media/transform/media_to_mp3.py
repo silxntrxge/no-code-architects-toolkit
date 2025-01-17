@@ -1,3 +1,4 @@
+
 import os
 import ffmpeg
 import requests
@@ -6,7 +7,7 @@ from services.file_management import download_file
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
 
-def process_conversion(media_url, job_id, bitrate='128k', webhook_url=None):
+def process_media_to_mp3(media_url, job_id, bitrate='128k', webhook_url=None):
     """Convert media to MP3 format with specified bitrate."""
     input_filename = download_file(media_url, os.path.join(STORAGE_PATH, f"{job_id}_input"))
     output_filename = f"{job_id}.mp3"

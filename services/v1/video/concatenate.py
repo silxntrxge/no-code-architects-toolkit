@@ -6,35 +6,7 @@ from services.file_management import download_file
 # Set the default local storage directory
 STORAGE_PATH = "/tmp/"
 
-def process_conversion(media_url, job_id, bitrate='128k', webhook_url=None):
-    """Convert media to MP3 format with specified bitrate."""
-    input_filename = download_file(media_url, os.path.join(STORAGE_PATH, f"{job_id}_input"))
-    output_filename = f"{job_id}.mp3"
-    output_path = os.path.join(STORAGE_PATH, output_filename)
-
-    try:
-        # Convert media file to MP3 with specified bitrate
-        (
-            ffmpeg
-            .input(input_filename)
-            .output(output_path, acodec='libmp3lame', audio_bitrate=bitrate)
-            .overwrite_output()
-            .run(capture_stdout=True, capture_stderr=True)
-        )
-        os.remove(input_filename)
-        print(f"Conversion successful: {output_path} with bitrate {bitrate}")
-
-        # Ensure the output file exists locally before attempting upload
-        if not os.path.exists(output_path):
-            raise FileNotFoundError(f"Output file {output_path} does not exist after conversion.")
-
-        return output_path
-
-    except Exception as e:
-        print(f"Conversion failed: {str(e)}")
-        raise
-
-def process_video_combination(media_urls, job_id, webhook_url=None):
+def process_video_concatenate(media_urls, job_id, webhook_url=None):
     """Combine multiple videos into one."""
     input_files = []
     output_filename = f"{job_id}.mp4"

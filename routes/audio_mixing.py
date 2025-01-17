@@ -1,12 +1,9 @@
-from flask import Blueprint, request, jsonify
-from flask import current_app
+from flask import Blueprint
 from app_utils import *
 import logging
 from services.audio_mixing import process_audio_mixing
 from services.authentication import authenticate
-import requests
-
-from services.gcp_toolkit import upload_to_gcs  # Ensure this import is present
+from services.cloud_storage import upload_file
 
 audio_mixing_bp = Blueprint('audio_mixing', __name__)
 logger = logging.getLogger(__name__)
@@ -29,7 +26,6 @@ logger = logging.getLogger(__name__)
 })
 @queue_task_wrapper(bypass_queue=False)
 def audio_mixing(job_id, data):
-    
     video_url = data.get('video_url')
     audio_url = data.get('audio_url')
     video_vol = data.get('video_vol', 100)
@@ -41,39 +37,19 @@ def audio_mixing(job_id, data):
     logger.info(f"Job {job_id}: Received audio mixing request for {video_url} and {audio_url}")
 
     try:
+        # Process audio and video mixing
         output_filename = process_audio_mixing(
             video_url, audio_url, video_vol, audio_vol, output_length, job_id, webhook_url
         )
-        gcs_url = upload_to_gcs(output_filename)
 
-        result = {
-            "message": "Audio mixing completed",
-            "gcs_url": gcs_url,
-            "job_id": job_id
-        }
+        # Upload the mixed file using the unified upload_file() method
+        cloud_url = upload_file(output_filename)
 
-        if webhook_url:
-            try:
-                webhook_response = requests.post(webhook_url, json=result)
-                if webhook_response.status_code == 200:
-                    logger.info(f"Job {job_id}: Successfully sent result to webhook: {webhook_url}")
-                    return jsonify({"message": "Audio mixing completed and sent to webhook"}), 200
-                else:
-                    logger.error(f"Job {job_id}: Failed to send result to webhook. Status code: {webhook_response.status_code}")
-                    return jsonify({"error": "Failed to send result to webhook"}), 500
-            except Exception as webhook_error:
-                logger.error(f"Job {job_id}: Error sending result to webhook: {str(webhook_error)}")
-                return jsonify({"error": "Error sending result to webhook"}), 500
-        else:
-            return jsonify(result), 200
+        logger.info(f"Job {job_id}: Mixed media uploaded to cloud storage: {cloud_url}")
+
+        # Return the cloud URL for the uploaded file
+        return cloud_url, "/audio-mixing", 200
         
     except Exception as e:
-        error_message = f"Job {job_id}: Error during audio mixing process - {str(e)}"
-        logger.error(error_message)
-        if webhook_url:
-            try:
-                requests.post(webhook_url, json={"error": error_message, "job_id": job_id})
-            except:
-                pass
-        return jsonify({"error": error_message}), 500
-
+        logger.error(f"Job {job_id}: Error during audio mixing process - {str(e)}")
+        return str(e), "/audio-mixing", 500
